@@ -3,6 +3,7 @@ from decimal import Decimal
 from estimator.services.currency import convert_currency
 from estimator.services.uk_tax import personal_allowance
 from estimator.services.uk_tax import personal_allowance, uk_incometax
+from estimator.services.gross_up import tax_grossup
 
 
 class CurrencyConversionTests(SimpleTestCase):
@@ -198,3 +199,46 @@ class IncomeTaxTests(SimpleTestCase):
             with self.subTest(income=income):
                 result = uk_incometax(income)
                 self.assertEqual(result, Decimal(expected))
+
+class GrossUpTests(SimpleTestCase):
+
+    # Test the gross-up calculation against the expected tax
+    def test_grossup(self):
+        tax = tax_grossup("30000")
+
+        self.assertEqual(
+            tax.quantize(Decimal("0.01")),
+            Decimal("4357.50")
+        )
+
+        self.assertLess(
+            abs(tax - uk_incometax(Decimal("30000") + tax)),
+            Decimal("0.01")
+        )
+
+    # Check gross-up when taxable income is zero
+    def test_zero_income(self):
+        result = tax_grossup("0")
+        self.assertEqual(result, Decimal("0"))
+
+    # Test gross-up for income in the additional tax band
+    def test_high_income(self):
+        income = Decimal("150000")
+        tax = tax_grossup(income)
+
+        expected_tax = uk_incometax(income + tax)
+
+        self.assertGreater(tax, Decimal("0"))
+        self.assertLess(
+            abs(tax - expected_tax),
+            Decimal("0.01")
+        )
+
+    # Check the final gross-up amount for high income
+    def test_high_income_amount(self):
+        tax = tax_grossup("150000")
+
+        self.assertEqual(
+        tax.quantize(Decimal("0.01")),
+        Decimal("97641.82")
+    )
