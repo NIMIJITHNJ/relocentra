@@ -5,7 +5,7 @@ from estimator.services.uk_tax import personal_allowance
 from estimator.services.uk_tax import personal_allowance, uk_incometax
 from estimator.services.gross_up import tax_grossup
 from estimator.services.swiss_tax import swiss_incometax
-from estimator.services.social_security import employee_social, employer_social
+from estimator.services.social_security import employee_social, employer_social, coverage_status
 from estimator.services.benefits import relocation_relief, housing_cost, housing_tax, relocation_cash, benefit_values, relocation_split, relocation_tax
 from estimator.services.cost_estimate import year_cost, assignment_total, home_pay, hypo_deductions, year_benefits, grossup_base, host_tax, swiss_charges, estimate_year, estimate_assignment
 
@@ -288,6 +288,27 @@ class SocialSecurityTests(SimpleTestCase):
             with self.subTest(income=income):
                 result = employee_social(income)
                 self.assertEqual(result["alv"], Decimal(expected))
+    
+    # Test confirmed and unverified Swiss social security coverage
+    def test_coverage_status(self):
+        confirmed = coverage_status(True)
+
+        self.assertEqual(confirmed["country"], "Switzerland")
+        self.assertFalse(confirmed["uk_ni"])
+        self.assertEqual(confirmed["status"], "Swiss coverage confirmed")
+
+        unverified = coverage_status(False)
+
+        self.assertIsNone(unverified["country"])
+        self.assertIsNone(unverified["uk_ni"])
+        self.assertEqual(unverified["status"], "Coverage requires verification")
+
+    # Check invalid certificate status inputs
+    def test_coverage_invalid(self):
+        for value in ("yes", "no", 1, 0, None):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    coverage_status(value)
 
 class BenefitsTests(SimpleTestCase):
 
@@ -1135,4 +1156,132 @@ class EmployerCostTests(SimpleTestCase):
         self.assertEqual(
             result["summary"]["total"],
             year1["cost"]["total"] + year2["cost"]["total"]
+        )
+    
+    # Test social security coverage in the annual estimate
+    def test_year_coverage(self):
+        inputs = {
+            "year": 1,
+            "salary": "150000",
+            "bonus": "20000",
+            "rate": "1.10",
+            "swiss_tax": "29578",
+            "monthly_rent": "3000",
+            "relocation": "5000",
+            "moving": "6000",
+            "temporary": "4000",
+            "taxable_kind": "36000"
+        }
+
+        confirmed = estimate_year(**inputs, certificate=True)
+        unverified = estimate_year(**inputs, certificate=False)
+
+        self.assertEqual(
+            confirmed["coverage"]["country"],
+            "Switzerland"
+        )
+
+        self.assertFalse(confirmed["coverage"]["uk_ni"])
+
+        self.assertIsNone(unverified["coverage"]["country"])
+        self.assertIsNone(unverified["coverage"]["uk_ni"])
+
+        self.assertEqual(
+            unverified["coverage"]["status"],
+            "Coverage requires verification"
+        )
+
+        
+        self.assertEqual(
+            confirmed["charges"]["total"],
+            unverified["charges"]["total"]
+        )
+
+        self.assertTrue(confirmed["charges"]["coverage_confirmed"])
+        self.assertFalse(unverified["charges"]["coverage_confirmed"])
+
+        self.assertTrue(confirmed["charges"]["provisional"])
+        self.assertTrue(unverified["charges"]["provisional"])
+
+        self.assertIn("additional employer charges", confirmed["charges"]["note"])
+        self.assertIn("UK NI unresolved", unverified["charges"]["note"])
+
+    
+    # Test social security coverage across both assignment years
+    def test_assignment_coverage(self):
+        inputs = {
+            "salary": "150000",
+            "bonus": "20000",
+            "rate": "1.10",
+            "swiss_tax": "29578",
+            "monthly_rent": "3000",
+            "relocation": "5000",
+            "moving": "6000",
+            "temporary": "4000",
+            "taxable_kind1": "36000",
+            "taxable_kind2": "36000"
+        }
+
+        confirmed = estimate_assignment(**inputs, certificate=True)
+        unverified = estimate_assignment(**inputs, certificate=False)
+
+        for year in ("year1", "year2"):
+            self.assertEqual(
+                confirmed[year]["coverage"]["country"],
+                "Switzerland"
+            )
+
+            self.assertFalse(
+                confirmed[year]["coverage"]["uk_ni"]
+            )
+
+            self.assertIsNone(
+                unverified[year]["coverage"]["country"]
+            )
+
+            self.assertIsNone(
+                unverified[year]["coverage"]["uk_ni"]
+            )
+
+            
+            self.assertEqual(
+                confirmed[year]["charges"]["total"],
+                unverified[year]["charges"]["total"]
+            )
+
+            self.assertTrue(confirmed[year]["charges"]["coverage_confirmed"])
+            self.assertFalse(unverified[year]["charges"]["coverage_confirmed"])
+
+            self.assertTrue(confirmed[year]["charges"]["provisional"])
+            self.assertTrue(unverified[year]["charges"]["provisional"])
+    
+    # Test provisional status in the two-year assignment summary
+    def test_assignment_provisional(self):
+        result = estimate_assignment(
+            salary="150000",
+            bonus="20000",
+            rate="1.10",
+            swiss_tax="29578",
+            monthly_rent="3000",
+            relocation="5000",
+            moving="6000",
+            temporary="4000",
+            taxable_kind1="36000",
+            taxable_kind2="36000",
+            certificate=True
+        )
+
+        summary = result["summary"]
+
+        self.assertTrue(summary["provisional"])
+
+        self.assertIn(
+            "employer contributions",
+            summary["note"]
+        )
+
+        self.assertEqual(
+            summary["total"],
+            result["year1"]["cost"]["total"]
+            + result["year2"]["cost"]["total"]
         )

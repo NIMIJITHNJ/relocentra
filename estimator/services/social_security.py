@@ -32,3 +32,21 @@ def employer_social(income):
         "alv": contributions["alv"],
         "total": contributions["total"]
     }
+
+# Identify Swiss social security coverage based on certificate confirmation
+def coverage_status(certificate):
+    if not isinstance(certificate, bool):
+        raise ValueError("Certificate status must be True or False.")
+
+    if certificate:
+        return {
+            "country": "Switzerland",
+            "uk_ni": False,
+            "status": "Swiss coverage confirmed"
+        }
+
+    return {
+        "country": None,
+        "uk_ni": None,
+        "status": "Coverage requires verification"
+    }

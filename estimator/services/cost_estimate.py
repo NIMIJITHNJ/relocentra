@@ -2,7 +2,7 @@ from decimal import Decimal, InvalidOperation
 from .currency import convert_currency
 from .benefits import housing_cost, relocation_cash, relocation_relief, benefit_values, relocation_split, relocation_tax
 from .gross_up import tax_grossup
-from .social_security import employer_social, employee_social
+from .social_security import employer_social, employee_social, coverage_status
 
 # Calculate annual employer cost from individual financial components
 def year_cost(home_pay, benefits, host_tax, employer_charges, hypo_tax, hypo_social):
@@ -183,7 +183,9 @@ def swiss_charges(income_chf, exchange_rate):
 def estimate_year(year, salary, bonus, rate, swiss_tax,
                   monthly_rent, relocation, moving, temporary, taxable_kind,
                   moving_ok=False, temporary_ok=False,
-                  payment="employer_direct"):
+                  payment="employer_direct", certificate=False):
+
+    coverage = coverage_status(certificate)
 
     pay = home_pay(salary, bonus, "CHF", rate)
 
@@ -217,6 +219,17 @@ def estimate_year(year, salary, bonus, rate, swiss_tax,
 
     charges = swiss_charges(income_chf, rate)
 
+    
+    charges["coverage_confirmed"] = certificate
+    charges["provisional"] = True
+
+    charges["note"] = (
+        "Swiss AHV/ALV estimate; additional employer charges not yet included"
+        if certificate
+        else "Illustrative Swiss AHV/ALV; social security coverage and UK NI unresolved"
+    )
+
+
     cost = year_cost(
         pay["total"],
         benefits["total"],
@@ -227,6 +240,7 @@ def estimate_year(year, salary, bonus, rate, swiss_tax,
     )
 
     return {
+        "coverage": coverage,
         "pay": pay,
         "benefits": benefits,
         "deductions": deductions,        
@@ -242,21 +256,33 @@ def estimate_year(year, salary, bonus, rate, swiss_tax,
 def estimate_assignment(salary, bonus, rate, swiss_tax, monthly_rent,
                         relocation, moving, temporary, taxable_kind1, taxable_kind2,
                         moving_ok=False, temporary_ok=False,
-                        payment="employer_direct"):
+                        payment="employer_direct", certificate=False):
 
     year1 = estimate_year(
         1, salary, bonus, rate, swiss_tax,
         monthly_rent, relocation, moving, temporary, taxable_kind1,
-        moving_ok, temporary_ok, payment
+        moving_ok, temporary_ok, payment, certificate=certificate
     )
 
     year2 = estimate_year(
         2, salary, bonus, rate, swiss_tax,
         monthly_rent, relocation, moving, temporary, taxable_kind2,
-        moving_ok, temporary_ok, payment
+        moving_ok, temporary_ok, payment, certificate=certificate
     )
 
     summary = assignment_total(year1["cost"], year2["cost"])
+
+    
+    summary["provisional"] = (
+        year1["charges"]["provisional"]
+        or year2["charges"]["provisional"]
+    )
+
+    summary["note"] = (
+        "Assignment costs are provisional until all applicable "
+        "employer contributions and social security obligations are verified."
+    )
+
 
     return {
         "year1": year1,
