@@ -5,6 +5,7 @@ from estimator.services.uk_tax import personal_allowance
 from estimator.services.uk_tax import personal_allowance, uk_incometax
 from estimator.services.gross_up import tax_grossup
 from estimator.services.swiss_tax import swiss_incometax
+from estimator.services.social_security import employee_social, employer_social
 
 
 class CurrencyConversionTests(SimpleTestCase):
@@ -254,3 +255,35 @@ class SwissTaxTests(SimpleTestCase):
         )
 
         self.assertEqual(result, Decimal("29578"))
+
+class SocialSecurityTests(SimpleTestCase):
+
+    # Test Swiss employee contributions for CHF 170,000
+    def test_employee_social(self):
+        result = employee_social("170000")
+
+        self.assertEqual(result["ahv"], Decimal("9010.00"))
+        self.assertEqual(result["alv"], Decimal("1630.20"))
+        self.assertEqual(result["total"], Decimal("10640.20"))
+
+    # Test Swiss employer contributions for CHF 170,000
+    def test_employer_social(self):
+        result = employer_social("170000")
+
+        self.assertEqual(result["ahv"], Decimal("9010.00"))
+        self.assertEqual(result["alv"], Decimal("1630.20"))
+        self.assertEqual(result["total"], Decimal("10640.20"))
+    
+    # Check the unemployment contribution ceiling
+    def test_alv_limit(self):
+        test_cases = [
+            ("100000", "1100.00"),
+            ("148200", "1630.20"),
+            ("170000", "1630.20"),
+            ("200000", "1630.20"),
+        ]
+
+        for income, expected in test_cases:
+            with self.subTest(income=income):
+                result = employee_social(income)
+                self.assertEqual(result["alv"], Decimal(expected))

@@ -10,3 +10,20 @@ SWISS_TAX_SOURCE = {
     "tax_year": "2026",
     "url": "https://swisstaxcalculator.estv.admin.ch/",
 }
+
+SWISS_AHV_SOURCE = {
+    "title": "Swiss AHV/IV/EO Contributions",
+    "tax_year": "2026",
+    "url": "https://www.ahv-iv.ch/p/2.01.e",
+}
+
+SWISS_ALV_SOURCE = {
+    "title": "Swiss Unemployment Insurance",
+    "tax_year": "2026",
+    "url": "https://www.ahv-iv.ch/p/890.e",
+}
+
+UK_SWISS_SOCIAL_SOURCE = {
+    "title": "GOV.UK - Social Security for Workers Coming to the UK",
+    "url": "https://www.gov.uk/guidance/social-security-contributions-for-workers-coming-to-the-uk-from-the-eea-or-switzerland",
+}

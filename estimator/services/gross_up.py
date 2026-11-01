@@ -1,4 +1,3 @@
-
 from decimal import Decimal, InvalidOperation
 from .uk_tax import uk_incometax
 

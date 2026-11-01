@@ -1,4 +1,3 @@
-
 from decimal import Decimal
 
 # UK Income Tax configuration for 2026/27
