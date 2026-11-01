@@ -1,0 +1,201 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assignment Cost Estimator | Relocentra</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f7fb;
+            color: #263348;
+            margin: 0;
+            padding: 30px 16px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 28px;
+            margin-bottom: 24px;
+            box-shadow: 0 3px 14px rgba(0, 0, 0, 0.06);
+        }
+
+        h1, h2 {
+            color: #17345c;
+        }
+
+        .subtitle {
+            color: #64748b;
+        }
+
+        form p {
+            margin-bottom: 18px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        input:not([type="checkbox"]), select {
+            box-sizing: border-box;
+            width: 100%;
+            padding: 11px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 8px;
+        }
+
+        .helptext {
+            display: block;
+            color: #64748b;
+            font-size: 13px;
+            margin-top: 5px;
+        }
+
+        .errorlist {
+            color: #b42318;
+        }
+
+        button {
+            background: #173e73;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 13px 24px;
+            cursor: pointer;
+            font-size: 15px;
+        }
+
+        button:hover {
+            background: #102f59;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+        }
+
+        th, td {
+            padding: 13px;
+            border-bottom: 1px solid #e2e8f0;
+            text-align: left;
+        }
+
+        th {
+            background: #f1f5f9;
+        }
+
+        .total {
+            font-weight: bold;
+            background: #edf3fa;
+        }
+
+        .warning {
+            border-left: 4px solid #d69e29;
+            padding: 14px;
+            background: #fff9e8;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="container">
+
+        <h1>Relocentra</h1>
+        <p class="subtitle">
+            Switzerland to United Kingdom | Two-Year Assignment Cost Estimator
+        </p>
+
+        <section class="card">
+            <h2>Assignment Details</h2>
+
+            <form method="post">
+                {% csrf_token %}
+
+                {{ form.as_p }}
+
+                <button type="submit">
+                    Calculate Assignment Cost
+                </button>
+            </form>
+        </section>
+
+        {% if result %}
+        <section class="card">
+            <h2>Assignment Cost Summary</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Component</th>
+                        <th>Estimated Cost (GBP)</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    <tr>
+                        <td>Year 1 Employer Cost</td>
+                        <td>£{{ result.year1.cost.total|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Year 2 Employer Cost</td>
+                        <td>£{{ result.year2.cost.total|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr class="total">
+                        <td>Total Two-Year Cost</td>
+                        <td>£{{ result.summary.total|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Cost Multiple of Home Pay</td>
+                        <td>{{ result.summary.multiple|floatformat:2 }}x</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2>Social Security Coverage</h2>
+
+            <p>
+                <strong>Year 1:</strong>
+                {{ result.year1.coverage.status }}
+            </p>
+
+            <p>
+                <strong>Year 2:</strong>
+                {{ result.year2.coverage.status }}
+            </p>
+
+            {% if result.summary.provisional %}
+            <div class="warning">
+                <strong>Provisional Estimate</strong>
+                <p>{{ result.summary.note }}</p>
+                <p>
+                    Swiss income tax, accommodation taxation,
+                    relocation eligibility and applicable employer
+                    contributions require verification.
+                </p>
+            </div>
+            {% endif %}
+        </section>
+        {% endif %}
+
+    </main>
+</body>
+</html>

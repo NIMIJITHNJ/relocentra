@@ -8,6 +8,7 @@ from estimator.services.swiss_tax import swiss_incometax
 from estimator.services.social_security import employee_social, employer_social, coverage_status, uk_employer_ni, uk_class1a_ni, uk_ni_charges, ni_scenario
 from estimator.services.benefits import relocation_relief, housing_cost, housing_tax, relocation_cash, benefit_values, relocation_split, relocation_tax
 from estimator.services.cost_estimate import year_cost, assignment_total, home_pay, hypo_deductions, year_benefits, grossup_base, host_tax, swiss_charges, estimate_year, estimate_assignment
+from estimator.forms import AssignmentCostForm
 
 class CurrencyConversionTests(SimpleTestCase):
 
@@ -1515,3 +1516,143 @@ class EmployerCostTests(SimpleTestCase):
             confirmed["summary"]["total"],
             unverified["summary"]["total"]
         )
+
+class AssignmentCostFormTests(SimpleTestCase):
+
+    # Test valid assignment form inputs
+    def test_valid_assignment_form(self):
+        data = {
+            "salary": "150000",
+            "bonus": "20000",
+            "rate": "1.10",
+            "swiss_tax": "29578",
+            "monthly_rent": "3000",
+            "relocation": "5000",
+            "moving": "6000",
+            "temporary": "4000",
+            "taxable_kind1": "36000",
+            "taxable_kind2": "36000",
+            "moving_ok": "on",
+            "temporary_ok": "on",
+            "payment": "employer_direct",
+            "certificate": "on"
+        }
+
+        form = AssignmentCostForm(data)
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["salary"], Decimal("150000"))
+        self.assertEqual(form.cleaned_data["rate"], Decimal("1.10"))
+        self.assertTrue(form.cleaned_data["moving_ok"])
+        self.assertTrue(form.cleaned_data["certificate"])
+
+    # Test invalid assignment form inputs
+    def test_invalid_assignment_form(self):
+        data = {
+            "salary": "-150000",
+            "bonus": "20000",
+            "rate": "0",
+            "swiss_tax": "29578",
+            "monthly_rent": "3000",
+            "relocation": "5000",
+            "moving": "6000",
+            "temporary": "4000",
+            "taxable_kind1": "36000",
+            "taxable_kind2": "36000",
+            "payment": "invalid_method"
+        }
+
+        form = AssignmentCostForm(data)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("salary", form.errors)
+        self.assertIn("rate", form.errors)
+        self.assertIn("payment", form.errors)
+
+class AssignmentViewTests(SimpleTestCase):
+
+    # Test assignment calculation through the Django webpage
+    def test_assignment_post(self):
+        data = {
+            "salary": "150000",
+            "bonus": "20000",
+            "rate": "1.10",
+            "swiss_tax": "29578",
+            "monthly_rent": "3000",
+            "relocation": "5000",
+            "moving": "6000",
+            "temporary": "4000",
+            "taxable_kind1": "36000",
+            "taxable_kind2": "36000",
+            "payment": "employer_direct"
+        }
+
+        response = self.client.post("/assignment/", data)
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertTemplateUsed(
+            response,
+            "estimator/assignment.html"
+        )
+
+        self.assertTrue(response.context["form"].is_valid())
+
+        result = response.context["result"]
+
+        self.assertIsNotNone(result)
+
+        self.assertEqual(
+            result["summary"]["total"].quantize(Decimal("0.01")),
+            Decimal("555561.02")
+        )
+
+        self.assertTrue(result["summary"]["provisional"])
+
+        self.assertIsNone(
+            result["year1"]["coverage"]["uk_ni"]
+        )
+    
+    # Test assignment form loading
+    def test_assignment_get(self):
+        response = self.client.get("/assignment/")
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertTemplateUsed(
+            response,
+            "estimator/assignment.html"
+        )
+
+        form = response.context["form"]
+
+        self.assertEqual(len(form.fields), 14)
+        self.assertEqual(form.initial.get("salary"), None)
+        self.assertIsNone(response.context["result"])
+
+        self.assertContains(
+            response,
+            "Calculate Assignment Cost"
+        )
+
+    # Test invalid assignment form submission
+    def test_assignment_invalid(self):
+        response = self.client.post(
+            "/assignment/",
+            {
+                "salary": "-100",
+                "rate": "0",
+                "payment": "invalid_method"
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        form = response.context["form"]
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("salary", form.errors)
+        self.assertIn("rate", form.errors)
+        self.assertIn("payment", form.errors)
+
+        self.assertIsNone(response.context["result"])
