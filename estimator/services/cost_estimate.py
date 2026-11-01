@@ -1,6 +1,6 @@
 from decimal import Decimal, InvalidOperation
 from .currency import convert_currency
-from .benefits import housing_cost, relocation_cash, relocation_relief, benefit_values
+from .benefits import housing_cost, relocation_cash, relocation_relief, benefit_values, relocation_split, relocation_tax
 from .gross_up import tax_grossup
 from .social_security import employer_social, employee_social
 
@@ -181,7 +181,9 @@ def swiss_charges(income_chf, exchange_rate):
 
 # Estimate annual employer cost using the existing calculation modules
 def estimate_year(year, salary, bonus, rate, swiss_tax,
-                  monthly_rent, relocation, moving, temporary, taxable_kind):
+                  monthly_rent, relocation, moving, temporary, taxable_kind,
+                  moving_ok=False, temporary_ok=False,
+                  payment="employer_direct"):
 
     pay = home_pay(salary, bonus, "CHF", rate)
 
@@ -194,7 +196,20 @@ def estimate_year(year, salary, bonus, rate, swiss_tax,
         year, monthly_rent, relocation, moving, temporary, rate
     )
 
-    taxable = benefit_values(benefits["relocation"], taxable_kind)
+    relief = relocation_split(
+        benefits["moving"],
+        benefits["temporary"],
+        moving_ok,
+        temporary_ok
+    )
+
+    reporting = relocation_tax(relief, payment)
+    
+    cash_total = benefits["relocation"] + reporting["taxable_cash"]
+    kind_total = Decimal(str(taxable_kind)) + reporting["taxable_kind"]
+
+    taxable = benefit_values(cash_total, kind_total)
+
 
     tax = host_tax(
         pay["total"], deductions["total"], taxable["total_taxable"]
@@ -214,7 +229,9 @@ def estimate_year(year, salary, bonus, rate, swiss_tax,
     return {
         "pay": pay,
         "benefits": benefits,
-        "deductions": deductions,
+        "deductions": deductions,        
+        "relief": relief,
+        "reporting": reporting,
         "taxable": taxable,
         "tax": tax,
         "charges": charges,
@@ -223,16 +240,20 @@ def estimate_year(year, salary, bonus, rate, swiss_tax,
 
 # Calculate the complete two-year assignment cost
 def estimate_assignment(salary, bonus, rate, swiss_tax, monthly_rent,
-                        relocation, moving, temporary, taxable_kind1, taxable_kind2):
+                        relocation, moving, temporary, taxable_kind1, taxable_kind2,
+                        moving_ok=False, temporary_ok=False,
+                        payment="employer_direct"):
 
     year1 = estimate_year(
         1, salary, bonus, rate, swiss_tax,
-        monthly_rent, relocation, moving, temporary, taxable_kind1
+        monthly_rent, relocation, moving, temporary, taxable_kind1,
+        moving_ok, temporary_ok, payment
     )
 
     year2 = estimate_year(
         2, salary, bonus, rate, swiss_tax,
-        monthly_rent, relocation, moving, temporary, taxable_kind2
+        monthly_rent, relocation, moving, temporary, taxable_kind2,
+        moving_ok, temporary_ok, payment
     )
 
     summary = assignment_total(year1["cost"], year2["cost"])

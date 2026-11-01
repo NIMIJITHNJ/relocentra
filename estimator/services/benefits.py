@@ -33,6 +33,34 @@ def relocation_relief(moving, temporary, moving_ok=False, temporary_ok=False):
         "non_exempt": total - exempt
     }
 
+# Split relocation expenses into exempt and non-exempt amounts
+def relocation_split(moving, temporary, moving_ok=False, temporary_ok=False):
+    relief = relocation_relief(moving, temporary, moving_ok, temporary_ok)
+
+    moving_cost = Decimal(str(moving))
+    temporary_cost = Decimal(str(temporary))
+
+    remaining = relief["exempt"]
+
+    moving_exempt = min(moving_cost, remaining) if moving_ok else Decimal("0")
+    remaining -= moving_exempt
+
+    temporary_exempt = min(temporary_cost, remaining) if temporary_ok else Decimal("0")
+
+    qualifying_excess = relief["qualifying"] - relief["exempt"]
+    non_qualifying = relief["total"] - relief["qualifying"]
+
+    return {
+        "moving_exempt": moving_exempt,
+        "temporary_exempt": temporary_exempt,
+        "moving_non_exempt": moving_cost - moving_exempt,
+        "temporary_non_exempt": temporary_cost - temporary_exempt,
+        "qualifying_excess": qualifying_excess,
+        "non_qualifying": non_qualifying,
+        "total_exempt": relief["exempt"],
+        "total_non_exempt": relief["non_exempt"]
+    }
+
 # Calculate employer housing expenditure
 def housing_cost(monthly_rent, months=12):
     try:
@@ -101,4 +129,42 @@ def benefit_values(cash, kind):
         "taxable_cash": cash_value,
         "taxable_kind": kind_value,
         "total_taxable": cash_value + kind_value
+    }
+
+# Classify taxable relocation expenses by payment method
+def relocation_tax(relief, payment):
+    methods = ("employer_direct", "employee_direct", "reimbursed")
+
+    if payment not in methods:
+        raise ValueError("Invalid relocation payment method.")
+
+    excess = relief["qualifying_excess"]
+    non_qualifying = relief["non_qualifying"]
+
+    if payment == "reimbursed":
+        taxable_cash = non_qualifying
+        taxable_kind = excess
+    else:
+        taxable_cash = Decimal("0")
+        taxable_kind = excess + non_qualifying
+    
+    paye = non_qualifying if payment == "reimbursed" else Decimal("0")
+
+    p11d = excess if payment == "reimbursed" else excess + non_qualifying
+
+    class1 = non_qualifying if payment != "employer_direct" else Decimal("0")
+
+    class1a = excess + (
+        non_qualifying if payment == "employer_direct" else Decimal("0")
+    )
+
+    return {
+        "taxable_cash": taxable_cash,
+        "taxable_kind": taxable_kind,
+        "total_taxable": taxable_cash + taxable_kind,
+        "payment_method": payment,
+        "paye_value": paye,
+        "p11d_value": p11d,
+        "uk_class1_base": class1,
+        "uk_class1a_base": class1a
     }

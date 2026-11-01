@@ -52,3 +52,13 @@ UK_ACCOMMODATION_SOURCE = {
     "title": "HMRC - Accommodation at Temporary Workplaces",
     "url": "https://www.gov.uk/hmrc-internal-manuals/employment-income-manual/eim31836",
 }
+
+UK_TEMP_RELOCATION_SOURCE = {
+    "title": "HMRC - Temporary Living Accommodation and Relocation Relief",
+    "url": "https://www.gov.uk/hmrc-internal-manuals/employment-income-manual/eim03117",
+}
+
+UK_RELOCATION_REPORT_SOURCE = {
+    "title": "HMRC - Reporting and Paying Tax on Relocation Costs",
+    "url": "https://www.gov.uk/expenses-and-benefits-relocation/what-to-report-and-pay",
+}

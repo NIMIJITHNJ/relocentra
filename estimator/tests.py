@@ -6,7 +6,7 @@ from estimator.services.uk_tax import personal_allowance, uk_incometax
 from estimator.services.gross_up import tax_grossup
 from estimator.services.swiss_tax import swiss_incometax
 from estimator.services.social_security import employee_social, employer_social
-from estimator.services.benefits import relocation_relief, housing_cost, housing_tax, relocation_cash, benefit_values
+from estimator.services.benefits import relocation_relief, housing_cost, housing_tax, relocation_cash, benefit_values, relocation_split, relocation_tax
 from estimator.services.cost_estimate import year_cost, assignment_total, home_pay, hypo_deductions, year_benefits, grossup_base, host_tax, swiss_charges, estimate_year, estimate_assignment
 
 class CurrencyConversionTests(SimpleTestCase):
@@ -462,7 +462,107 @@ class BenefitsTests(SimpleTestCase):
             with self.subTest(cash=cash, kind=kind):
                 with self.assertRaises(ValueError):
                     benefit_values(cash, kind)
+    
+    # Test relocation exemption allocation for different eligibility conditions
+    def test_relocation_split(self):
+        test_cases = [
+            (True, True, "6000", "2000", "2000"),
+            (True, False, "6000", "0", "4000"),
+            (False, True, "0", "4000", "6000"),
+            (False, False, "0", "0", "10000"),
+        ]
 
+        for moving_ok, temporary_ok, moving_exempt, temporary_exempt, non_exempt in test_cases:
+            with self.subTest(moving=moving_ok, temporary=temporary_ok):
+                result = relocation_split(
+                    "6000", "4000", moving_ok, temporary_ok
+                )
+
+                self.assertEqual(
+                    result["moving_exempt"], Decimal(moving_exempt)
+                )
+                self.assertEqual(
+                    result["temporary_exempt"], Decimal(temporary_exempt)
+                )
+                self.assertEqual(
+                    result["total_non_exempt"], Decimal(non_exempt)
+                )
+                self.assertEqual(
+                    result["total_exempt"] + result["total_non_exempt"],
+                    Decimal("10000")
+                )
+    
+    # Test qualifying excess and non-qualifying relocation expenses
+    def test_relocation_classification(self):
+        test_cases = [
+            (True, True, "2000", "0"),
+            (True, False, "0", "4000"),
+            (False, True, "0", "6000"),
+            (False, False, "0", "10000"),
+        ]
+
+        for moving_ok, temporary_ok, excess, non_qualifying in test_cases:
+            with self.subTest(moving=moving_ok, temporary=temporary_ok):
+                result = relocation_split(
+                    "6000", "4000", moving_ok, temporary_ok
+                )
+
+                self.assertEqual(
+                    result["qualifying_excess"], Decimal(excess)
+                )
+
+                self.assertEqual(
+                    result["non_qualifying"], Decimal(non_qualifying)
+                )
+
+                self.assertEqual(
+                    result["total_non_exempt"],
+                    result["qualifying_excess"] + result["non_qualifying"]
+                )
+    
+    # Test relocation tax classification for different payment methods
+    def test_relocation_tax(self):
+        relief = relocation_split("9000", "4000", True, False)
+
+        test_cases = [
+            ("employer_direct", "0", "5000"),
+            ("employee_direct", "0", "5000"),
+            ("reimbursed", "4000", "1000"),
+        ]
+
+        for payment, cash, kind in test_cases:
+            with self.subTest(payment=payment):
+                result = relocation_tax(relief, payment)
+
+                self.assertEqual(
+                    result["taxable_cash"], Decimal(cash)
+                )
+                self.assertEqual(
+                    result["taxable_kind"], Decimal(kind)
+                )
+                self.assertEqual(
+                    result["total_taxable"], Decimal("5000")
+                )
+                self.assertEqual(result["payment_method"], payment)
+    
+    # Test relocation reporting and National Insurance classifications
+    def test_relocation_reporting(self):
+        relief = relocation_split("9000", "4000", True, False)
+
+        test_cases = [
+            ("employer_direct", "0", "5000", "0", "5000"),
+            ("employee_direct", "0", "5000", "4000", "1000"),
+            ("reimbursed", "4000", "1000", "4000", "1000"),
+        ]
+
+        for payment, paye, p11d, class1, class1a in test_cases:
+            with self.subTest(payment=payment):
+                result = relocation_tax(relief, payment)
+
+                self.assertEqual(result["paye_value"], Decimal(paye))
+                self.assertEqual(result["p11d_value"], Decimal(p11d))
+                self.assertEqual(result["uk_class1_base"], Decimal(class1))
+                self.assertEqual(result["uk_class1a_base"], Decimal(class1a))
 
 class EmployerCostTests(SimpleTestCase):
 
@@ -703,7 +803,7 @@ class EmployerCostTests(SimpleTestCase):
 
         self.assertEqual(
             result["taxable"]["total_taxable"].quantize(Decimal("0.01")),
-            Decimal("40545.45")
+            Decimal("50545.45")
         )
 
         tax = result["tax"]["employer_tax"]
@@ -844,4 +944,195 @@ class EmployerCostTests(SimpleTestCase):
         self.assertGreater(
             summary["year1"],
             summary["year2"]
+        )
+    
+    # Test relocation relief in the annual employer estimate
+    def test_year_relief(self):
+        result = estimate_year(
+            year=1,
+            salary="150000",
+            bonus="20000",
+            rate="1.10",
+            swiss_tax="29578",
+            monthly_rent="3000",
+            relocation="5000",
+            moving="6000",
+            temporary="4000",
+            taxable_kind="36000",
+            moving_ok=True,
+            temporary_ok=True
+        )
+
+        relief = result["relief"]
+
+        self.assertEqual(relief["moving_exempt"], Decimal("6000"))
+        self.assertEqual(relief["temporary_exempt"], Decimal("2000"))
+        self.assertEqual(relief["total_exempt"], Decimal("8000"))
+        self.assertEqual(relief["total_non_exempt"], Decimal("2000"))
+
+        self.assertEqual(
+            result["benefits"]["total"].quantize(Decimal("0.01")),
+            Decimal("50545.45")
+        )
+    
+    # Check qualifying relocation excess is included in taxable benefits
+    def test_relocation_taxable(self):
+        result = estimate_year(
+            year=1,
+            salary="150000",
+            bonus="20000",
+            rate="1.10",
+            swiss_tax="29578",
+            monthly_rent="3000",
+            relocation="5000",
+            moving="6000",
+            temporary="4000",
+            taxable_kind="36000",
+            moving_ok=True,
+            temporary_ok=True
+        )
+
+        self.assertEqual(
+            result["relief"]["qualifying_excess"],
+            Decimal("2000")
+        )
+
+        self.assertEqual(
+            result["taxable"]["taxable_kind"],
+            Decimal("38000")
+        )
+
+        self.assertEqual(
+            result["taxable"]["total_taxable"].quantize(Decimal("0.01")),
+            Decimal("42545.45")
+        )
+
+        self.assertEqual(
+            result["benefits"]["total"].quantize(Decimal("0.01")),
+            Decimal("50545.45")
+        )
+    
+    # Check relocation reporting for both assignment years
+    def test_year_reporting(self):
+        for year in (1, 2):
+            with self.subTest(year=year):
+                result = estimate_year(
+                    year=year,
+                    salary="150000",
+                    bonus="20000",
+                    rate="1.10",
+                    swiss_tax="29578",
+                    monthly_rent="3000",
+                    relocation="5000",
+                    moving="6000",
+                    temporary="4000",
+                    taxable_kind="36000",
+                    moving_ok=True,
+                    temporary_ok=True,
+                    payment="employer_direct"
+                )
+
+                reporting = result["reporting"]
+                expected = Decimal("2000") if year == 1 else Decimal("0")
+
+                self.assertEqual(reporting["paye_value"], Decimal("0"))
+                self.assertEqual(reporting["p11d_value"], expected)
+                self.assertEqual(reporting["uk_class1_base"], Decimal("0"))
+                self.assertEqual(reporting["uk_class1a_base"], expected)
+                self.assertEqual(
+                    reporting["payment_method"], "employer_direct"
+                )
+    
+    # Test taxable relocation reimbursements in the annual estimate
+    def test_relocation_reimbursed(self):
+        result = estimate_year(
+            year=1,
+            salary="150000",
+            bonus="20000",
+            rate="1.10",
+            swiss_tax="29578",
+            monthly_rent="3000",
+            relocation="5000",
+            moving="6000",
+            temporary="4000",
+            taxable_kind="36000",
+            moving_ok=True,
+            temporary_ok=False,
+            payment="reimbursed"
+        )
+
+        self.assertEqual(
+            result["reporting"]["taxable_cash"],
+            Decimal("4000")
+        )
+
+        self.assertEqual(
+            result["taxable"]["taxable_cash"].quantize(Decimal("0.01")),
+            Decimal("8545.45")
+        )
+
+        self.assertEqual(
+            result["taxable"]["taxable_kind"],
+            Decimal("36000")
+        )
+
+        self.assertEqual(
+            result["taxable"]["total_taxable"].quantize(Decimal("0.01")),
+            Decimal("44545.45")
+        )
+
+        self.assertEqual(
+            result["benefits"]["total"].quantize(Decimal("0.01")),
+            Decimal("50545.45")
+        )
+    
+    # Test relocation eligibility and payment settings across both years
+    def test_assignment_relocation(self):
+        result = estimate_assignment(
+            salary="150000",
+            bonus="20000",
+            rate="1.10",
+            swiss_tax="29578",
+            monthly_rent="3000",
+            relocation="5000",
+            moving="6000",
+            temporary="4000",
+            taxable_kind1="36000",
+            taxable_kind2="36000",
+            moving_ok=True,
+            temporary_ok=False,
+            payment="reimbursed"
+        )
+
+        year1 = result["year1"]
+        year2 = result["year2"]
+
+        self.assertEqual(
+            year1["relief"]["total_exempt"],
+            Decimal("6000")
+        )
+
+        self.assertEqual(
+            year1["reporting"]["taxable_cash"],
+            Decimal("4000")
+        )
+
+        self.assertEqual(
+            year1["reporting"]["payment_method"],
+            "reimbursed"
+        )
+
+        self.assertEqual(
+            year1["taxable"]["total_taxable"].quantize(Decimal("0.01")),
+            Decimal("44545.45")
+        )
+
+        self.assertEqual(
+            year2["reporting"]["total_taxable"],
+            Decimal("0")
+        )
+
+        self.assertEqual(
+            result["summary"]["total"],
+            year1["cost"]["total"] + year2["cost"]["total"]
         )
