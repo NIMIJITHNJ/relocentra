@@ -50,3 +50,60 @@ def coverage_status(certificate):
         "uk_ni": None,
         "status": "Coverage requires verification"
     }
+
+# Calculate standard UK employer Class 1 National Insurance
+def uk_employer_ni(earnings, threshold):
+    earnings = Decimal(str(earnings))
+    threshold = Decimal(str(threshold))
+
+    if not earnings.is_finite() or not threshold.is_finite():
+        raise ValueError("Earnings and threshold must be finite.")
+
+    if earnings < 0 or threshold < 0:
+        raise ValueError("Earnings and threshold cannot be negative.")
+
+    taxable = max(earnings - threshold, Decimal("0"))
+
+    return taxable * Decimal("0.15")
+
+# Calculate UK employer Class 1A National Insurance on applicable benefits
+def uk_class1a_ni(benefits):
+    benefits = Decimal(str(benefits))
+
+    if not benefits.is_finite():
+        raise ValueError("Benefits must be finite.")
+
+    if benefits < 0:
+        raise ValueError("Benefits cannot be negative.")
+
+    return benefits * Decimal("0.15")
+
+# Calculate combined UK employer National Insurance charges
+def uk_ni_charges(earnings, benefits, threshold):
+    class1 = uk_employer_ni(earnings, threshold)
+    class1a = uk_class1a_ni(benefits)
+
+    return {
+        "class1": class1,
+        "class1a": class1a,
+        "total": class1 + class1a
+    }
+
+# Determine UK National Insurance based on confirmed coverage
+def ni_scenario(earnings, benefits, threshold, certificate=False):
+    coverage = coverage_status(certificate)
+
+    if coverage["uk_ni"] is False:
+        return {
+            "applicable": False,
+            "liability": Decimal("0"),
+            "illustrative": None,
+            "status": "UK NI exempt under confirmed Swiss coverage"
+        }
+
+    return {
+        "applicable": None,
+        "liability": None,
+        "illustrative": uk_ni_charges(earnings, benefits, threshold),
+        "status": "UK NI liability requires verification"
+    }

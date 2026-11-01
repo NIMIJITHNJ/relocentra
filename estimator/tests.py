@@ -5,7 +5,7 @@ from estimator.services.uk_tax import personal_allowance
 from estimator.services.uk_tax import personal_allowance, uk_incometax
 from estimator.services.gross_up import tax_grossup
 from estimator.services.swiss_tax import swiss_incometax
-from estimator.services.social_security import employee_social, employer_social, coverage_status
+from estimator.services.social_security import employee_social, employer_social, coverage_status, uk_employer_ni, uk_class1a_ni, uk_ni_charges, ni_scenario
 from estimator.services.benefits import relocation_relief, housing_cost, housing_tax, relocation_cash, benefit_values, relocation_split, relocation_tax
 from estimator.services.cost_estimate import year_cost, assignment_total, home_pay, hypo_deductions, year_benefits, grossup_base, host_tax, swiss_charges, estimate_year, estimate_assignment
 
@@ -309,6 +309,128 @@ class SocialSecurityTests(SimpleTestCase):
             with self.subTest(value=value):
                 with self.assertRaises(ValueError):
                     coverage_status(value)
+    
+    # Test standard UK employer National Insurance calculations
+    def test_uk_employer_ni(self):
+        self.assertEqual(
+            uk_employer_ni("3000", "417"),
+            Decimal("387.45")
+        )
+
+        self.assertEqual(
+            uk_employer_ni("60000", "5000"),
+            Decimal("8250.00")
+        )
+
+        self.assertEqual(
+            uk_employer_ni("4000", "5000"),
+            Decimal("0")
+        )
+
+    # Test invalid UK employer National Insurance inputs
+    def test_uk_employer_ni_invalid(self):
+        invalid = [
+            ("-100", "417"),
+            ("3000", "-417"),
+            ("NaN", "417"),
+            ("Infinity", "417")
+        ]
+
+        for earnings, threshold in invalid:
+            with self.subTest(earnings=earnings, threshold=threshold):
+                with self.assertRaises(ValueError):
+                    uk_employer_ni(earnings, threshold)
+    
+    # Test UK employer Class 1A National Insurance
+    def test_uk_class1a_ni(self):
+        self.assertEqual(
+            uk_class1a_ni("2000"),
+            Decimal("300.00")
+        )
+
+        self.assertEqual(
+            uk_class1a_ni("36000"),
+            Decimal("5400.00")
+        )
+
+        self.assertEqual(
+            uk_class1a_ni("0"),
+            Decimal("0.00")
+        )
+
+    # Test invalid Class 1A benefit values
+    def test_uk_class1a_ni_invalid(self):
+        for value in ("-100", "NaN", "Infinity"):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    uk_class1a_ni(value)
+    
+    # Test combined UK employer National Insurance
+    def test_uk_ni_charges(self):
+        result = uk_ni_charges("60000", "2000", "5000")
+
+        self.assertEqual(result["class1"], Decimal("8250.00"))
+        self.assertEqual(result["class1a"], Decimal("300.00"))
+        self.assertEqual(result["total"], Decimal("8550.00"))
+
+        below = uk_ni_charges("4000", "1000", "5000")
+
+        self.assertEqual(below["class1"], Decimal("0"))
+        self.assertEqual(below["class1a"], Decimal("150.00"))
+        self.assertEqual(below["total"], Decimal("150.00"))
+
+    # Test invalid combined National Insurance inputs
+    def test_uk_ni_charges_invalid(self):
+        invalid = [
+            ("-100", "2000", "5000"),
+            ("60000", "-200", "5000"),
+            ("60000", "2000", "-5000"),
+            ("NaN", "2000", "5000")
+        ]
+
+        for earnings, benefits, threshold in invalid:
+            with self.subTest(earnings=earnings, benefits=benefits):
+                with self.assertRaises(ValueError):
+                    uk_ni_charges(earnings, benefits, threshold)
+    
+    # Test UK National Insurance under different coverage scenarios
+    def test_ni_scenario(self):
+        confirmed = ni_scenario("60000", "2000", "5000", certificate=True)
+
+        self.assertFalse(confirmed["applicable"])
+        self.assertEqual(confirmed["liability"], Decimal("0"))
+        self.assertIsNone(confirmed["illustrative"])
+
+        unverified = ni_scenario("60000", "2000", "5000", certificate=False)
+
+        self.assertIsNone(unverified["applicable"])
+        self.assertIsNone(unverified["liability"])
+
+        self.assertEqual(
+            unverified["illustrative"]["class1"],
+            Decimal("8250.00")
+        )
+
+        self.assertEqual(
+            unverified["illustrative"]["class1a"],
+            Decimal("300.00")
+        )
+
+        self.assertEqual(
+            unverified["illustrative"]["total"],
+            Decimal("8550.00")
+        )
+
+    # Test invalid inputs for National Insurance scenarios
+    def test_ni_scenario_invalid(self):
+        with self.assertRaises(ValueError):
+            ni_scenario("60000", "2000", "5000", certificate="yes")
+
+        with self.assertRaises(ValueError):
+            ni_scenario("-100", "2000", "5000", certificate=False)
+
+        with self.assertRaises(ValueError):
+            ni_scenario("60000", "-2000", "5000", certificate=False)
 
 class BenefitsTests(SimpleTestCase):
 
@@ -1284,4 +1406,112 @@ class EmployerCostTests(SimpleTestCase):
             summary["total"],
             result["year1"]["cost"]["total"]
             + result["year2"]["cost"]["total"]
+        )
+    
+    # Test UK National Insurance integration in the annual estimate
+    def test_year_uk_ni(self):
+        inputs = {
+            "year": 1,
+            "salary": "150000",
+            "bonus": "20000",
+            "rate": "1.10",
+            "swiss_tax": "29578",
+            "monthly_rent": "3000",
+            "relocation": "5000",
+            "moving": "6000",
+            "temporary": "4000",
+            "taxable_kind": "36000",
+            "moving_ok": True,
+            "temporary_ok": True
+        }
+
+        confirmed = estimate_year(**inputs, certificate=True)
+        unverified = estimate_year(**inputs, certificate=False)
+
+        self.assertEqual(
+            confirmed["uk_ni"]["liability"],
+            Decimal("0")
+        )
+
+        self.assertIsNone(
+            confirmed["uk_ni"]["illustrative"]
+        )
+
+        self.assertIsNone(
+            unverified["uk_ni"]["liability"]
+        )
+
+        illustrative = unverified["uk_ni"]["illustrative"]
+
+        expected_class1 = (
+            unverified["pay"]["total"]
+            + unverified["benefits"]["relocation"]
+            - Decimal("5000")
+        ) * Decimal("0.15")
+
+        self.assertEqual(
+            illustrative["class1"],
+            expected_class1
+        )
+
+        self.assertEqual(
+            illustrative["class1a"],
+            Decimal("5700.00")
+        )
+
+        self.assertEqual(
+            illustrative["total"],
+            expected_class1 + Decimal("5700.00")
+        )
+
+        self.assertEqual(
+            confirmed["cost"]["total"],
+            unverified["cost"]["total"]
+        )
+    
+    # Test UK National Insurance across both assignment years
+    def test_assignment_uk_ni(self):
+        inputs = {
+            "salary": "150000",
+            "bonus": "20000",
+            "rate": "1.10",
+            "swiss_tax": "29578",
+            "monthly_rent": "3000",
+            "relocation": "5000",
+            "moving": "6000",
+            "temporary": "4000",
+            "taxable_kind1": "36000",
+            "taxable_kind2": "36000",
+            "moving_ok": True,
+            "temporary_ok": True
+        }
+
+        confirmed = estimate_assignment(**inputs, certificate=True)
+        unverified = estimate_assignment(**inputs, certificate=False)
+
+        for year in ("year1", "year2"):
+            self.assertEqual(
+                confirmed[year]["uk_ni"]["liability"],
+                Decimal("0")
+            )
+
+            self.assertIsNone(
+                unverified[year]["uk_ni"]["liability"]
+            )
+
+            self.assertIsNotNone(
+                unverified[year]["uk_ni"]["illustrative"]
+            )
+
+        year1_ni = unverified["year1"]["uk_ni"]["illustrative"]
+        year2_ni = unverified["year2"]["uk_ni"]["illustrative"]
+
+        self.assertEqual(year1_ni["class1a"], Decimal("5700.00"))
+        self.assertEqual(year2_ni["class1a"], Decimal("5400.00"))
+
+        self.assertGreater(year1_ni["class1"], year2_ni["class1"])
+
+        self.assertEqual(
+            confirmed["summary"]["total"],
+            unverified["summary"]["total"]
         )

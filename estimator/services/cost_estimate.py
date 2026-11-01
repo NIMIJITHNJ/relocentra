@@ -2,7 +2,7 @@ from decimal import Decimal, InvalidOperation
 from .currency import convert_currency
 from .benefits import housing_cost, relocation_cash, relocation_relief, benefit_values, relocation_split, relocation_tax
 from .gross_up import tax_grossup
-from .social_security import employer_social, employee_social, coverage_status
+from .social_security import employer_social, employee_social, coverage_status, ni_scenario
 
 # Calculate annual employer cost from individual financial components
 def year_cost(home_pay, benefits, host_tax, employer_charges, hypo_tax, hypo_social):
@@ -229,6 +229,25 @@ def estimate_year(year, salary, bonus, rate, swiss_tax,
         else "Illustrative Swiss AHV/ALV; social security coverage and UK NI unresolved"
     )
 
+    
+    # Calculate illustrative UK employer National Insurance
+    ni_earnings = (
+        pay["total"]
+        + benefits["relocation"]
+        + reporting["uk_class1_base"]
+    )
+
+    ni_benefits = (
+        Decimal(str(taxable_kind))
+        + reporting["uk_class1a_base"]
+    )
+
+    uk_ni = ni_scenario(
+        ni_earnings,
+        ni_benefits,
+        Decimal("5000"),
+        certificate=certificate
+    )
 
     cost = year_cost(
         pay["total"],
@@ -249,6 +268,7 @@ def estimate_year(year, salary, bonus, rate, swiss_tax,
         "taxable": taxable,
         "tax": tax,
         "charges": charges,
+        "uk_ni": uk_ni,
         "cost": cost
     }
 
