@@ -1,6 +1,8 @@
 from django.test import TestCase, SimpleTestCase
 from decimal import Decimal
 from estimator.services.currency import convert_currency
+from estimator.services.uk_tax import personal_allowance
+from estimator.services.uk_tax import personal_allowance, uk_incometax
 
 
 class CurrencyConversionTests(SimpleTestCase):
@@ -157,3 +159,42 @@ class CurrencyConversionTests(SimpleTestCase):
         self.assertEqual(
             result, Decimal("1") / Decimal("3")
         )
+
+    
+class PersonalAllowanceTests(SimpleTestCase):
+
+    # Check personal allowance at different income levels
+    def test_personal_allowance(self):
+        test_cases = [
+            ("50000", "12570"),
+            ("100000", "12570"),
+            ("110000", "7570"),
+            ("120000", "2570"),
+            ("125140", "0"),
+            ("150000", "0"),
+        ]
+
+        for income, expected in test_cases:
+            with self.subTest(income=income):
+                result = personal_allowance(income)
+                self.assertEqual(result, Decimal(expected))
+
+
+class IncomeTaxTests(SimpleTestCase):
+
+    # Test UK income tax at different income levels
+    def test_uk_incometax(self):
+        test_cases = [
+            ("0", "0"),
+            ("12570", "0"),
+            ("50000", "7486"),
+            ("100000", "27432"),
+            ("110000", "33432"),
+            ("125140", "42516"),
+            ("150000", "53703"),
+        ]
+
+        for income, expected in test_cases:
+            with self.subTest(income=income):
+                result = uk_incometax(income)
+                self.assertEqual(result, Decimal(expected))
