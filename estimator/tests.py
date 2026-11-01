@@ -6,7 +6,7 @@ from estimator.services.uk_tax import personal_allowance, uk_incometax
 from estimator.services.gross_up import tax_grossup
 from estimator.services.swiss_tax import swiss_incometax
 from estimator.services.social_security import employee_social, employer_social
-
+from estimator.services.benefits import relocation_relief, housing_cost, housing_tax, relocation_cash
 
 class CurrencyConversionTests(SimpleTestCase):
 
@@ -287,3 +287,153 @@ class SocialSecurityTests(SimpleTestCase):
             with self.subTest(income=income):
                 result = employee_social(income)
                 self.assertEqual(result["alv"], Decimal(expected))
+
+class BenefitsTests(SimpleTestCase):
+
+    # Test relocation relief for different eligibility conditions
+    def test_relocation_relief(self):
+        test_cases = [
+            (True, True, "8000", "2000"),
+            (True, False, "6000", "4000"),
+            (False, True, "4000", "6000"),
+            (False, False, "0", "10000"),
+        ]
+
+        for moving_ok, temporary_ok, exempt, non_exempt in test_cases:
+            with self.subTest(moving=moving_ok, temporary=temporary_ok):
+                result = relocation_relief(
+                    "6000", "4000", moving_ok, temporary_ok
+                )
+
+                self.assertEqual(result["total"], Decimal("10000"))
+                self.assertEqual(result["exempt"], Decimal(exempt))
+                self.assertEqual(result["non_exempt"], Decimal(non_exempt))
+    
+    # Check the maximum relocation exemption
+    def test_relocation_limit(self):
+        result = relocation_relief("8000", "5000", True, True)
+
+        self.assertEqual(result["total"], Decimal("13000"))
+        self.assertEqual(result["exempt"], Decimal("8000"))
+        self.assertEqual(result["non_exempt"], Decimal("5000"))
+
+    # Check invalid relocation expenses and eligibility
+    def test_relocation_invalid(self):
+        invalid_cases = [
+            ("-100", "4000", True, True),
+            ("6000", "-500", True, True),
+            ("invalid", "4000", True, True),
+            ("NaN", "4000", True, True),
+            ("6000", "4000", "yes", True),
+        ]
+
+        for moving, temporary, moving_ok, temporary_ok in invalid_cases:
+            with self.subTest(moving=moving, temporary=temporary):
+                with self.assertRaises(ValueError):
+                    relocation_relief(
+                        moving, temporary, moving_ok, temporary_ok
+                    )
+    
+    # Check housing costs for different rental periods
+    def test_housing_cost(self):
+        test_cases = [
+            ("3000", 12, "36000"),
+            ("3000", 6, "18000"),
+            ("3000", 1, "3000"),
+            ("3000", 0, "0"),
+            ("0", 12, "0"),
+        ]
+
+        for rent, months, expected in test_cases:
+            with self.subTest(rent=rent, months=months):
+                result = housing_cost(rent, months)
+                self.assertEqual(result, Decimal(expected))
+    
+    # Check invalid housing costs and rental periods
+    def test_housing_invalid(self):
+        invalid_cases = [
+            ("-3000", 12),
+            ("invalid", 12),
+            ("NaN", 12),
+            ("Infinity", 12),
+            ("3000", -1),
+            ("3000", 2.5),
+            ("3000", True),
+            ("3000", "12"),
+        ]
+
+        for rent, months in invalid_cases:
+            with self.subTest(rent=rent, months=months):
+                with self.assertRaises(ValueError):
+                    housing_cost(rent, months)
+    
+    # Test taxable housing benefits with different relief amounts
+    def test_housing_tax(self):
+        test_cases = [
+            ("36000", "0", "36000"),
+            ("36000", "12000", "24000"),
+            ("36000", "36000", "0"),
+            ("0", "0", "0"),
+        ]
+
+        for gross, relief, expected in test_cases:
+            with self.subTest(gross=gross, relief=relief):
+                result = housing_tax(gross, relief)
+
+                self.assertEqual(result["gross"], Decimal(gross))
+                self.assertEqual(result["relief"], Decimal(relief))
+                self.assertEqual(result["taxable"], Decimal(expected))
+    
+    # Check invalid housing benefits and relief amounts
+    def test_housing_tax_invalid(self):
+        invalid_cases = [
+            ("-1000", "0"),
+            ("36000", "-500"),
+            ("36000", "40000"),
+            ("invalid", "0"),
+            ("36000", "invalid"),
+            ("NaN", "0"),
+            ("36000", "Infinity"),
+            (None, "0"),
+        ]
+
+        for gross, relief in invalid_cases:
+            with self.subTest(gross=gross, relief=relief):
+                with self.assertRaises(ValueError):
+                    housing_tax(gross, relief)
+    
+    # Test relocation cash allowance conversion
+    def test_relocation_cash(self):
+        test_cases = [
+            ("5000", "CHF", "1.10", "4545.45"),
+            ("1000", "GBP", "1", "1000.00"),
+            ("0", "CHF", "1.10", "0.00"),
+        ]
+
+        for amount, currency, rate, expected in test_cases:
+            with self.subTest(currency=currency, amount=amount):
+                result = relocation_cash(amount, currency, rate)
+
+                self.assertEqual(
+                    result["cost"].quantize(Decimal("0.01")),
+                    Decimal(expected)
+                )
+                self.assertEqual(
+                    result["taxable_cash"],
+                    result["cost"]
+                )
+
+    # Check invalid relocation allowance inputs
+    def test_relocation_cash_invalid(self):
+        invalid_cases = [
+            ("-5000", "CHF", "1.10"),
+            ("invalid", "CHF", "1.10"),
+            ("5000", "XYZ", "1.10"),
+            ("5000", "CHF", "0"),
+            ("NaN", "CHF", "1.10"),
+        ]
+
+        for amount, currency, rate in invalid_cases:
+            with self.subTest(amount=amount, currency=currency):
+                with self.assertRaises(ValueError):
+                    relocation_cash(amount, currency, rate)
