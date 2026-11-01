@@ -1656,3 +1656,40 @@ class AssignmentViewTests(SimpleTestCase):
         self.assertIn("payment", form.errors)
 
         self.assertIsNone(response.context["result"])
+    
+    # Test National Insurance display for both coverage scenarios
+    def test_assignment_ni_display(self):
+        data = {
+            "salary": "150000",
+            "bonus": "20000",
+            "rate": "1.10",
+            "swiss_tax": "29578",
+            "monthly_rent": "3000",
+            "relocation": "5000",
+            "moving": "6000",
+            "temporary": "4000",
+            "taxable_kind1": "36000",
+            "taxable_kind2": "36000",
+            "payment": "employer_direct"
+        }
+
+        unverified = self.client.post("/assignment/", data)
+
+        self.assertEqual(unverified.status_code, 200)
+        self.assertContains(unverified, "£30013.64")
+        self.assertContains(unverified, "£27831.82")
+        self.assertContains(unverified, "illustrative")
+
+        data["certificate"] = "on"
+
+        confirmed = self.client.post("/assignment/", data)
+
+        self.assertEqual(confirmed.status_code, 200)
+
+        self.assertContains(
+            confirmed,
+            "UK employer National Insurance: £0.00"
+        )
+
+        self.assertNotContains(confirmed, "£30013.64")
+        self.assertNotContains(confirmed, "£27831.82")

@@ -169,6 +169,323 @@
                     </tr>
                 </tbody>
             </table>
+            
+            <h2>Year 1 - Detailed Cost Breakdown</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Cost Component</th>
+                        <th>Amount (GBP)</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    <tr>
+                        <td>Annual Salary and Bonus</td>
+                        <td>£{{ result.year1.pay.total|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Housing and Relocation Expenses</td>
+                        <td>£{{ result.year1.benefits.total|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>UK Income Tax Gross-Up</td>
+                        <td>£{{ result.year1.tax.employer_tax|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Swiss Employer Contributions (Provisional)</td>
+                        <td>£{{ result.year1.charges.total|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Less: Hypothetical Swiss Income Tax</td>
+                        <td>−£{{ result.year1.deductions.hypo_tax|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Less: Hypothetical Swiss Social Security</td>
+                        <td>−£{{ result.year1.deductions.hypo_social|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr class="total">
+                        <td>Total Year 1 Employer Cost</td>
+                        <td>£{{ result.year1.cost.total|floatformat:2 }}</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <h2>Year 2 - Detailed Cost Breakdown</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Cost Component</th>
+                        <th>Amount (GBP)</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    <tr>
+                        <td>Annual Salary and Bonus</td>
+                        <td>£{{ result.year2.pay.total|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Housing and Relocation Expenses</td>
+                        <td>£{{ result.year2.benefits.total|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>UK Income Tax Gross-Up</td>
+                        <td>£{{ result.year2.tax.employer_tax|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Swiss Employer Contributions (Provisional)</td>
+                        <td>£{{ result.year2.charges.total|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Less: Hypothetical Swiss Income Tax</td>
+                        <td>−£{{ result.year2.deductions.hypo_tax|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Less: Hypothetical Swiss Social Security</td>
+                        <td>−£{{ result.year2.deductions.hypo_social|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr class="total">
+                        <td>Total Year 2 Employer Cost</td>
+                        <td>£{{ result.year2.cost.total|floatformat:2 }}</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <h2>Year 1 - UK Income Tax Calculation</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Calculation Component</th>
+                        <th>Amount (GBP)</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    <tr>
+                        <td>Annual Salary and Bonus</td>
+                        <td>£{{ result.year1.pay.total|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Less: Hypothetical Swiss Deductions</td>
+                        <td>−£{{ result.year1.deductions.total|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Taxable Cash Benefits</td>
+                        <td>£{{ result.year1.taxable.taxable_cash|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Taxable Benefits in Kind</td>
+                        <td>£{{ result.year1.taxable.taxable_kind|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Total Taxable Benefits</td>
+                        <td>£{{ result.year1.taxable.total_taxable|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Income Before Tax Gross-Up</td>
+                        <td>£{{ result.year1.tax.taxable_base|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr class="total">
+                        <td>Employer Funded UK Income Tax</td>
+                        <td>£{{ result.year1.tax.employer_tax|floatformat:2 }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p class="subtitle">
+                The tax gross-up is calculated using the current UK income tax model.
+                Taxable benefit classifications and applicable reliefs remain
+                provisional until verified.
+            </p>
+            
+            <h2>Year 2 - UK Income Tax Calculation</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Calculation Component</th>
+                        <th>Amount (GBP)</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    <tr>
+                        <td>Annual Salary and Bonus</td>
+                        <td>£{{ result.year2.pay.total|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Less: Hypothetical Swiss Deductions</td>
+                        <td>−£{{ result.year2.deductions.total|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Taxable Cash Benefits</td>
+                        <td>£{{ result.year2.taxable.taxable_cash|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Taxable Benefits in Kind</td>
+                        <td>£{{ result.year2.taxable.taxable_kind|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Total Taxable Benefits</td>
+                        <td>£{{ result.year2.taxable.total_taxable|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Income Before Tax Gross-Up</td>
+                        <td>£{{ result.year2.tax.taxable_base|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr class="total">
+                        <td>Employer Funded UK Income Tax</td>
+                        <td>£{{ result.year2.tax.employer_tax|floatformat:2 }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p class="subtitle">
+                Year 2 excludes one-time relocation benefits.
+                Accommodation taxation and other applicable reliefs
+                remain subject to verification.
+            </p>
+            
+            <h2>Year 1 - Relocation Expenses and Tax Treatment</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Component</th>
+                        <th>Amount (GBP)</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    <tr>
+                        <td>Cash Relocation Allowance</td>
+                        <td>£{{ result.year1.benefits.relocation|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Moving Expenses</td>
+                        <td>£{{ result.year1.benefits.moving|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Temporary Accommodation</td>
+                        <td>£{{ result.year1.benefits.temporary|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Qualifying Expenses Exempted</td>
+                        <td>£{{ result.year1.relief.total_exempt|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Taxable Relocation Expense Payments</td>
+                        <td>£{{ result.year1.reporting.taxable_cash|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Taxable Relocation Benefits in Kind</td>
+                        <td>£{{ result.year1.reporting.taxable_kind|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr class="total">
+                        <td>Total Taxable Relocation Expenses</td>
+                        <td>£{{ result.year1.reporting.total_taxable|floatformat:2 }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p class="subtitle">
+                The cash relocation allowance is calculated separately from
+                relocation expense taxation. Exemption eligibility and benefit
+                reporting classifications follow the selected modelling assumptions
+                and require verification against applicable HMRC rules.
+            </p>
+            
+            <h2>UK Employer National Insurance</h2>
+
+            {% if result.year1.uk_ni.illustrative %}
+
+            <p class="subtitle">
+                The following figures are illustrative because UK National
+                Insurance liability has not been confirmed.
+            </p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Component</th>
+                        <th>Year 1 (GBP)</th>
+                        <th>Year 2 (GBP)</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    <tr>
+                        <td>Employer Class 1 NI</td>
+                        <td>£{{ result.year1.uk_ni.illustrative.class1|floatformat:2 }}</td>
+                        <td>£{{ result.year2.uk_ni.illustrative.class1|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Employer Class 1A NI</td>
+                        <td>£{{ result.year1.uk_ni.illustrative.class1a|floatformat:2 }}</td>
+                        <td>£{{ result.year2.uk_ni.illustrative.class1a|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr class="total">
+                        <td>Illustrative Total</td>
+                        <td>£{{ result.year1.uk_ni.illustrative.total|floatformat:2 }}</td>
+                        <td>£{{ result.year2.uk_ni.illustrative.total|floatformat:2 }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p class="subtitle">
+                These illustrative amounts are not included in the assignment
+                cost totals. Actual liability depends on social security coverage
+                and the applicable earnings and benefit classifications.
+            </p>
+
+            {% elif result.year1.uk_ni.applicable == False %}
+
+            <p>
+                UK employer National Insurance: £0.00 under the confirmed
+                Swiss social security coverage assumption.
+            </p>
+
+            {% else %}
+
+            <p>UK National Insurance liability requires verification.</p>
+
+            {% endif %}
 
             <h2>Social Security Coverage</h2>
 
