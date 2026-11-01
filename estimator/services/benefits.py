@@ -82,3 +82,23 @@ def relocation_cash(amount, currency, exchange_rate):
         "cost": value,
         "taxable_cash": value
     }
+
+# Group taxable cash and benefits in kind
+def benefit_values(cash, kind):
+    try:
+        cash_value = Decimal(str(cash))
+        kind_value = Decimal(str(kind))
+    except (InvalidOperation, ValueError, TypeError):
+        raise ValueError("Invalid taxable benefit amount.")
+
+    if any(
+        not value.is_finite() or value < 0
+        for value in (cash_value, kind_value)
+    ):
+        raise ValueError("Taxable benefits must be finite and non-negative.")
+
+    return {
+        "taxable_cash": cash_value,
+        "taxable_kind": kind_value,
+        "total_taxable": cash_value + kind_value
+    }

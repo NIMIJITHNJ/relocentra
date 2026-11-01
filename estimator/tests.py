@@ -6,7 +6,8 @@ from estimator.services.uk_tax import personal_allowance, uk_incometax
 from estimator.services.gross_up import tax_grossup
 from estimator.services.swiss_tax import swiss_incometax
 from estimator.services.social_security import employee_social, employer_social
-from estimator.services.benefits import relocation_relief, housing_cost, housing_tax, relocation_cash
+from estimator.services.benefits import relocation_relief, housing_cost, housing_tax, relocation_cash, benefit_values
+from estimator.services.cost_estimate import year_cost, assignment_total, home_pay, hypo_deductions, year_benefits, grossup_base, host_tax, swiss_charges, estimate_year, estimate_assignment
 
 class CurrencyConversionTests(SimpleTestCase):
 
@@ -437,3 +438,410 @@ class BenefitsTests(SimpleTestCase):
             with self.subTest(amount=amount, currency=currency):
                 with self.assertRaises(ValueError):
                     relocation_cash(amount, currency, rate)
+    
+    # Test taxable cash and benefits in kind
+    def test_benefit_values(self):
+        result = benefit_values("4545.45", "36000")
+
+        self.assertEqual(result["taxable_cash"], Decimal("4545.45"))
+        self.assertEqual(result["taxable_kind"], Decimal("36000"))
+        self.assertEqual(result["total_taxable"], Decimal("40545.45"))
+
+    # Check invalid taxable benefit amounts
+    def test_benefit_values_invalid(self):
+        invalid_cases = [
+            ("-100", "36000"),
+            ("4545", "-500"),
+            ("invalid", "36000"),
+            ("NaN", "36000"),
+            ("4545", "Infinity"),
+            (None, "36000"),
+        ]
+
+        for cash, kind in invalid_cases:
+            with self.subTest(cash=cash, kind=kind):
+                with self.assertRaises(ValueError):
+                    benefit_values(cash, kind)
+
+
+class EmployerCostTests(SimpleTestCase):
+
+    # Check annual employer cost with deductions and charges
+    def test_year_cost(self):
+        result = year_cost(
+            home_pay="150000",
+            benefits="50000",
+            host_tax="40000",
+            employer_charges="10000",
+            hypo_tax="20000",
+            hypo_social="10000"
+        )
+
+        self.assertEqual(result["home_pay"], Decimal("150000"))
+        self.assertEqual(result["benefits"], Decimal("50000"))
+        self.assertEqual(result["host_tax"], Decimal("40000"))
+        self.assertEqual(result["employer_charges"], Decimal("10000"))
+        self.assertEqual(result["hypo_tax"], Decimal("20000"))
+        self.assertEqual(result["hypo_social"], Decimal("10000"))
+        self.assertEqual(result["total"], Decimal("220000"))
+    
+    # Check invalid employer cost inputs
+    def test_year_cost_invalid(self):
+        invalid_cases = [
+            ("-100", "50000", "40000", "10000", "20000", "10000"),
+            ("150000", "-500", "40000", "10000", "20000", "10000"),
+            ("150000", "50000", "invalid", "10000", "20000", "10000"),
+            ("150000", "50000", "40000", "NaN", "20000", "10000"),
+            ("150000", "50000", "40000", "10000", "Infinity", "10000"),
+            ("150000", "50000", "40000", "10000", "20000", None),
+        ]
+
+        for values in invalid_cases:
+            with self.subTest(values=values):
+                with self.assertRaises(ValueError):
+                    year_cost(*values)
+    
+    # Test the combined employer cost for a two-year assignment
+    def test_assignment_total(self):
+        year1 = year_cost(
+            "150000", "50000", "40000",
+            "10000", "20000", "10000"
+        )
+
+        year2 = year_cost(
+            "150000", "36000", "40000",
+            "10000", "20000", "10000"
+        )
+
+        result = assignment_total(year1, year2)
+
+        self.assertEqual(result["year1"], Decimal("220000"))
+        self.assertEqual(result["year2"], Decimal("206000"))
+        self.assertEqual(result["total"], Decimal("426000"))
+        self.assertEqual(result["home_pay"], Decimal("300000"))
+        self.assertEqual(result["multiple"], Decimal("1.42"))
+    
+    # Check assignment cost when home pay is zero
+    def test_zero_home_pay(self):
+        year1 = year_cost("0", "5000", "0", "0", "0", "0")
+        year2 = year_cost("0", "3000", "0", "0", "0", "0")
+
+        result = assignment_total(year1, year2)
+
+        self.assertEqual(result["year1"], Decimal("5000"))
+        self.assertEqual(result["year2"], Decimal("3000"))
+        self.assertEqual(result["total"], Decimal("8000"))
+        self.assertEqual(result["home_pay"], Decimal("0"))
+        self.assertIsNone(result["multiple"])
+    
+    # Test annual home salary and bonus conversion
+    def test_home_pay(self):
+        result = home_pay("150000", "20000", "CHF", "1.10")
+
+        self.assertEqual(
+            result["salary"].quantize(Decimal("0.01")),
+            Decimal("136363.64")
+        )
+
+        self.assertEqual(
+            result["bonus"].quantize(Decimal("0.01")),
+            Decimal("18181.82")
+        )
+
+        self.assertEqual(
+            result["total"].quantize(Decimal("0.01")),
+            Decimal("154545.45")
+        )
+
+        self.assertEqual(
+            result["total"],
+            result["salary"] + result["bonus"]
+        )
+    
+    # Test hypothetical Swiss deductions converted into GBP
+    def test_hypo_deductions(self):
+        result = hypo_deductions("29578", "10640.20", "1.10")
+
+        self.assertEqual(
+            result["hypo_tax"].quantize(Decimal("0.01")),
+            Decimal("26889.09")
+        )
+
+        self.assertEqual(
+            result["hypo_social"].quantize(Decimal("0.01")),
+            Decimal("9672.91")
+        )
+
+        self.assertEqual(
+            result["total"].quantize(Decimal("0.01")),
+            Decimal("36562.00")
+        )
+
+        self.assertEqual(
+            result["total"],
+            result["hypo_tax"] + result["hypo_social"]
+        )
+    
+    # Test assignment benefits for both years
+    def test_year_benefits(self):
+        year1 = year_benefits(1, "3000", "5000", "6000", "4000", "1.10")
+        year2 = year_benefits(2, "3000", "5000", "6000", "4000", "1.10")
+
+        self.assertEqual(year1["housing"], Decimal("36000"))
+        self.assertEqual(
+            year1["relocation"].quantize(Decimal("0.01")),
+            Decimal("4545.45")
+        )
+        self.assertEqual(year1["moving"], Decimal("6000"))
+        self.assertEqual(year1["temporary"], Decimal("4000"))
+        self.assertEqual(
+            year1["total"].quantize(Decimal("0.01")),
+            Decimal("50545.45")
+        )
+
+        self.assertEqual(year2["housing"], Decimal("36000"))
+        self.assertEqual(year2["relocation"], Decimal("0"))
+        self.assertEqual(year2["moving"], Decimal("0"))
+        self.assertEqual(year2["temporary"], Decimal("0"))
+        self.assertEqual(year2["total"], Decimal("36000"))
+    
+    # Test the starting income for UK tax gross-up
+    def test_grossup_base(self):
+        result = grossup_base(
+            home="154545.45",
+            deductions="36562.00",
+            taxable="40545.45"
+        )
+
+        self.assertEqual(result, Decimal("158528.90"))
+    
+    # Test employer paid UK tax with hypothetical deductions and benefits
+    def test_host_tax(self):
+        result = host_tax(
+            home="154545.45",
+            deductions="36562.00",
+            taxable="40545.45"
+        )
+
+        self.assertEqual(
+            result["taxable_base"],
+            Decimal("158528.90")
+        )
+
+        self.assertEqual(
+            result["employer_tax"].quantize(Decimal("0.01")),
+            Decimal("104620.01")
+        )
+
+        expected = uk_incometax(
+            result["taxable_base"] + result["employer_tax"]
+        )
+
+        self.assertLess(
+            abs(result["employer_tax"] - expected),
+            Decimal("0.01")
+        )
+    
+    # Test Swiss employer contributions converted into GBP
+    def test_swiss_charges(self):
+        result = swiss_charges("170000", "1.10")
+
+        self.assertEqual(
+            result["ahv"].quantize(Decimal("0.01")),
+            Decimal("8190.91")
+        )
+
+        self.assertEqual(
+            result["alv"].quantize(Decimal("0.01")),
+            Decimal("1482.00")
+        )
+
+        self.assertEqual(
+            result["total"].quantize(Decimal("0.01")),
+            Decimal("9672.91")
+        )
+
+        self.assertEqual(
+            result["total"],
+            result["ahv"] + result["alv"]
+        )
+    
+    # Test the complete employer cost calculation for Year 1
+    def test_estimate_year(self):
+        result = estimate_year(
+            year=1,
+            salary="150000",
+            bonus="20000",
+            rate="1.10",
+            swiss_tax="29578",
+            monthly_rent="3000",
+            relocation="5000",
+            moving="6000",
+            temporary="4000",
+            taxable_kind="36000"
+        )
+
+        self.assertEqual(
+            result["pay"]["total"].quantize(Decimal("0.01")),
+            Decimal("154545.45")
+        )
+
+        self.assertEqual(
+            result["benefits"]["total"].quantize(Decimal("0.01")),
+            Decimal("50545.45")
+        )
+
+        self.assertEqual(
+            result["deductions"]["total"].quantize(Decimal("0.01")),
+            Decimal("36562.00")
+        )
+
+        self.assertEqual(
+            result["charges"]["total"].quantize(Decimal("0.01")),
+            Decimal("9672.91")
+        )
+
+        self.assertEqual(
+            result["taxable"]["total_taxable"].quantize(Decimal("0.01")),
+            Decimal("40545.45")
+        )
+
+        tax = result["tax"]["employer_tax"]
+        base = result["tax"]["taxable_base"]
+
+        self.assertLess(
+            abs(tax - uk_incometax(base + tax)),
+            Decimal("0.01")
+        )
+
+        expected_cost = (
+            result["pay"]["total"]
+            + result["benefits"]["total"]
+            + tax
+            + result["charges"]["total"]
+            - result["deductions"]["total"]
+        )
+
+        self.assertEqual(result["cost"]["total"], expected_cost)
+    
+    # Test employer cost calculation for the second year
+    def test_estimate_year2(self):
+        result = estimate_year(
+            year=2,
+            salary="150000",
+            bonus="20000",
+            rate="1.10",
+            swiss_tax="29578",
+            monthly_rent="3000",
+            relocation="5000",
+            moving="6000",
+            temporary="4000",
+            taxable_kind="36000"
+        )
+
+        self.assertEqual(
+            result["pay"]["total"].quantize(Decimal("0.01")),
+            Decimal("154545.45")
+        )
+
+        self.assertEqual(
+            result["benefits"]["total"],
+            Decimal("36000")
+        )
+
+        self.assertEqual(
+            result["benefits"]["relocation"],
+            Decimal("0")
+        )
+
+        self.assertEqual(
+            result["benefits"]["moving"],
+            Decimal("0")
+        )
+
+        self.assertEqual(
+            result["benefits"]["temporary"],
+            Decimal("0")
+        )
+
+        self.assertEqual(
+            result["taxable"]["taxable_cash"],
+            Decimal("0")
+        )
+
+        tax = result["tax"]["employer_tax"]
+        base = result["tax"]["taxable_base"]
+
+        self.assertLess(
+            abs(tax - uk_incometax(base + tax)),
+            Decimal("0.01")
+        )
+
+        expected_cost = (
+            result["pay"]["total"]
+            + result["benefits"]["total"]
+            + tax
+            + result["charges"]["total"]
+            - result["deductions"]["total"]
+        )
+
+        self.assertEqual(result["cost"]["total"], expected_cost)
+    
+    # Test the complete two-year employer cost estimate
+    def test_estimate_assignment(self):
+        result = estimate_assignment(
+            salary="150000",
+            bonus="20000",
+            rate="1.10",
+            swiss_tax="29578",
+            monthly_rent="3000",
+            relocation="5000",
+            moving="6000",
+            temporary="4000",
+            taxable_kind1="36000",
+            taxable_kind2="36000"
+        )
+
+        year1 = result["year1"]
+        year2 = result["year2"]
+        summary = result["summary"]
+
+        self.assertEqual(
+            year1["benefits"]["total"].quantize(Decimal("0.01")),
+            Decimal("50545.45")
+        )
+
+        self.assertEqual(
+            year2["benefits"]["total"],
+            Decimal("36000")
+        )
+
+        self.assertEqual(
+            summary["year1"],
+            year1["cost"]["total"]
+        )
+
+        self.assertEqual(
+            summary["year2"],
+            year2["cost"]["total"]
+        )
+
+        self.assertEqual(
+            summary["total"],
+            summary["year1"] + summary["year2"]
+        )
+
+        self.assertEqual(
+            summary["home_pay"].quantize(Decimal("0.01")),
+            Decimal("309090.91")
+        )
+
+        self.assertEqual(
+            summary["multiple"],
+            summary["total"] / summary["home_pay"]
+        )
+
+        self.assertGreater(
+            summary["year1"],
+            summary["year2"]
+        )
