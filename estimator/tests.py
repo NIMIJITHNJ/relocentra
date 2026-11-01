@@ -4,6 +4,7 @@ from estimator.services.currency import convert_currency
 from estimator.services.uk_tax import personal_allowance
 from estimator.services.uk_tax import personal_allowance, uk_incometax
 from estimator.services.gross_up import tax_grossup
+from estimator.services.swiss_tax import swiss_incometax
 
 
 class CurrencyConversionTests(SimpleTestCase):
@@ -242,3 +243,14 @@ class GrossUpTests(SimpleTestCase):
         tax.quantize(Decimal("0.01")),
         Decimal("97641.82")
     )
+
+
+class SwissTaxTests(SimpleTestCase):
+
+    # Check Swiss income tax against the official Zurich estimate
+    def test_zurich_tax(self):
+        result = swiss_incometax(
+            "6735", "10130", "12689", "24"
+        )
+
+        self.assertEqual(result, Decimal("29578"))
