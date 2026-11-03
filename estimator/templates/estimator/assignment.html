@@ -128,6 +128,100 @@
                 {% csrf_token %}
 
                 {{ form.as_p }}
+                
+                <h3>Accommodation Calculation Method</h3>
+
+                <p class="subtitle">
+                    Choose whether to use manually entered taxable benefits
+                    or calculate accommodation benefits from the property
+                    and assignment details.
+                </p>
+
+                <label for="housing_mode">Calculation Method</label>
+
+                <select id="housing_mode" name="housing_mode">
+                    <option value="manual" {% if not housing_mode %}selected{% endif %}>
+                        Manual Taxable Benefits
+                    </option>
+
+                    <option value="assessed" {% if housing_mode %}selected{% endif %}>
+                        Detailed Accommodation Assessment
+                    </option>
+                </select>
+
+                <fieldset id="housing_fields" disabled hidden>
+                    <h3>Year 1 - Accommodation Assessment</h3>
+
+                    {{ housing_form1.as_p }}
+
+                    <h3>Year 2 - Accommodation Assessment</h3>
+
+                    {{ housing_form2.as_p }}
+                </fieldset>                
+                
+                <input type="hidden" name="manual_kind1" id="manual_kind1"
+                    value="{{ form.data.manual_kind1|default:'36000' }}">
+
+                <input type="hidden" name="manual_kind2" id="manual_kind2"
+                    value="{{ form.data.manual_kind2|default:'36000' }}">
+
+                <script>
+                    const housingMode = document.getElementById("housing_mode");
+                    const housingFields = document.getElementById("housing_fields");
+
+                    const kind1 = document.getElementById("id_taxable_kind1");
+                    const kind2 = document.getElementById("id_taxable_kind2");
+
+                    const saved1 = document.getElementById("manual_kind1");
+                    const saved2 = document.getElementById("manual_kind2");
+
+                    const label1 = document.querySelector('label[for="id_taxable_kind1"]');
+                    const label2 = document.querySelector('label[for="id_taxable_kind2"]');
+
+                    let manualValues = housingMode.value === "assessed"
+                        ? [saved1.value, saved2.value]
+                        : [kind1.value, kind2.value];
+
+                    let assessedValues = housingMode.value === "assessed"
+                        ? [kind1.value, kind2.value]
+                        : ["0", "0"];
+
+                    function updateHousingFields() {
+                        const assessed = housingMode.value === "assessed";
+
+                        housingFields.hidden = !assessed;
+                        housingFields.disabled = !assessed;
+
+                        label1.textContent = assessed
+                            ? "Year 1 Other Taxable Benefits (GBP) - Excluding Accommodation:"
+                            : "Year 1 Taxable Accommodation and Other Benefits (GBP):";
+
+                        label2.textContent = assessed
+                            ? "Year 2 Other Taxable Benefits (GBP) - Excluding Accommodation:"
+                            : "Year 2 Taxable Accommodation and Other Benefits (GBP):";
+                    }
+
+                    housingMode.addEventListener("change", function () {
+                        if (housingMode.value === "assessed") {
+                            manualValues = [kind1.value, kind2.value];
+
+                            kind1.value = assessedValues[0];
+                            kind2.value = assessedValues[1];
+                        } else {
+                            assessedValues = [kind1.value, kind2.value];
+
+                            kind1.value = manualValues[0];
+                            kind2.value = manualValues[1];
+                        }
+
+                        saved1.value = manualValues[0];
+                        saved2.value = manualValues[1];
+
+                        updateHousingFields();
+                    });
+
+                    updateHousingFields();
+                </script>
 
                 <button type="submit">
                     Calculate Assignment Cost
@@ -170,6 +264,58 @@
                 </tbody>
             </table>
             
+            {% if result.uk_summary %}
+
+            <h2>Alternative Employer Cost Scenario - UK National Insurance</h2>
+
+            <p class="subtitle">
+                This illustrative scenario substitutes UK employer National
+                Insurance for Swiss employer social security contributions.
+                It is shown separately from the Swiss-based estimate.
+            </p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Component</th>
+                        <th>Estimated Cost (GBP)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Year 1 - UK NI Scenario</td>
+                        <td>£{{ result.uk_summary.year1|floatformat:2 }}</td>
+                    </tr>
+                    <tr>
+                        <td>Year 2 - UK NI Scenario</td>
+                        <td>£{{ result.uk_summary.year2|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="total">
+                        <td>Total Two-Year UK NI Scenario</td>
+                        <td>£{{ result.uk_summary.total|floatformat:2 }}</td>
+                    </tr>
+                    <tr>
+                        <td>Cost Multiple of Home Pay</td>
+                        <td>{{ result.uk_summary.multiple|floatformat:2 }}x</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="warning">
+                <strong>Illustrative Alternative</strong>
+                <p>
+                    Social security coverage has not been confirmed.
+                    This scenario replaces Swiss employer contributions
+                    with estimated UK employer NI while retaining the
+                    existing tax equalisation assumptions.
+                    Additional employee NI, employer-funded liabilities
+                    and related tax adjustments are not yet fully modelled.
+                    It must not be treated as a final employer cost.
+                </p>
+            </div>
+
+            {% endif %}
+
             <h2>Year 1 - Detailed Cost Breakdown</h2>
 
             <table>
@@ -195,10 +341,18 @@
                         <td>UK Income Tax Gross-Up</td>
                         <td>£{{ result.year1.tax.employer_tax|floatformat:2 }}</td>
                     </tr>
-
+                    
                     <tr>
-                        <td>Swiss Employer Contributions (Provisional)</td>
-                        <td>£{{ result.year1.charges.total|floatformat:2 }}</td>
+                        <td>Swiss AHV/IV/EO Contributions</td>
+                        <td>£{{ result.year1.charges.ahv|floatformat:2 }}</td>
+                    </tr>
+                    <tr>
+                        <td>Swiss ALV Contributions</td>
+                        <td>£{{ result.year1.charges.alv|floatformat:2 }}</td>
+                    </tr>
+                    <tr>
+                        <td>Additional Swiss Employer Costs</td>
+                        <td>£{{ result.year1.charges.other|floatformat:2 }}</td>
                     </tr>
 
                     <tr>
@@ -218,6 +372,85 @@
                 </tbody>
             </table>
             
+            <div class="source-links">
+                <p class="subtitle">
+                    <strong>Official Reference - Swiss Hypothetical Income Tax</strong>
+                </p>
+
+                <ul>
+                    {% for source in section_sources.swiss_tax %}
+                    <li>
+                        <a href="{{ source.url }}"
+                        target="_blank"
+                        rel="noopener noreferrer">
+                            {{ source.title }}
+                        </a>
+
+                        {% if source.tax_year %}
+                            ({{ source.tax_year }})
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                <p class="subtitle">
+                    The hypothetical Swiss income tax is currently entered
+                    manually using an external tax estimate. Relocentra does
+                    not automatically recalculate Swiss tax when salary or
+                    personal circumstances change. The amount must be verified
+                    for the selected assignment scenario.
+                </p>
+                
+                {% if form.cleaned_data.salary == 150000 and form.cleaned_data.bonus == 20000 and form.cleaned_data.swiss_tax == 29578 %}
+                <p class="subtitle">
+                    <strong>2026 Zurich City Tax Benchmark:</strong>
+                    Federal CHF 6,735 + Cantonal CHF 10,130 +
+                    Communal CHF 12,689 + Personal CHF 24 =
+                    CHF 29,578.
+                </p>
+
+                <p class="subtitle">
+                    Assumptions: single taxpayer, age 35, no children,
+                    no church tax, CHF 170,000 annual gross income.
+                    The calculator includes applicable deductions when
+                    determining taxable income.
+                </p>
+                {% endif %}
+
+            </div>
+            
+            <div class="source-links">
+                <p class="subtitle">
+                    <strong>Official References - Swiss Social Security</strong>
+                </p>
+
+                <ul>
+                    {% for source in section_sources.swiss_social %}
+                    <li>
+                        <a href="{{ source.url }}"
+                        target="_blank"
+                        rel="noopener noreferrer">
+                            {{ source.title }}
+                        </a>
+
+                        {% if source.tax_year %}
+                            ({{ source.tax_year }})
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                <p class="subtitle">
+                    Swiss AHV/IV/EO and ALV rates are used to estimate
+                    hypothetical employee deductions and employer contributions
+                    for both assignment years.
+
+                    The calculations remain provisional. Additional employer
+                    obligations, applicable contribution limits and social
+                    security coverage must be verified.
+                </p>
+            </div>
+
             <h2>Year 2 - Detailed Cost Breakdown</h2>
 
             <table>
@@ -243,10 +476,18 @@
                         <td>UK Income Tax Gross-Up</td>
                         <td>£{{ result.year2.tax.employer_tax|floatformat:2 }}</td>
                     </tr>
-
+                    
                     <tr>
-                        <td>Swiss Employer Contributions (Provisional)</td>
-                        <td>£{{ result.year2.charges.total|floatformat:2 }}</td>
+                        <td>Swiss AHV/IV/EO Contributions</td>
+                        <td>£{{ result.year2.charges.ahv|floatformat:2 }}</td>
+                    </tr>
+                    <tr>
+                        <td>Swiss ALV Contributions</td>
+                        <td>£{{ result.year2.charges.alv|floatformat:2 }}</td>
+                    </tr>
+                    <tr>
+                        <td>Additional Swiss Employer Costs</td>
+                        <td>£{{ result.year2.charges.other|floatformat:2 }}</td>
                     </tr>
 
                     <tr>
@@ -266,6 +507,134 @@
                 </tbody>
             </table>
             
+            <div class="source-links">
+                <p class="subtitle">
+                    <strong>Official References - UK Accommodation and Secondment</strong>
+                </p>
+
+                <ul>
+                    {% for source in section_sources.accommodation %}
+                    <li>
+                        <a href="{{ source.url }}"
+                        target="_blank"
+                        rel="noopener noreferrer">
+                            {{ source.title }}
+                        </a>
+
+                        {% if source.tax_year %}
+                            ({{ source.tax_year }})
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                <p class="subtitle">
+                    Employer provided accommodation and temporary workplace
+                    arrangements may have different tax treatments depending
+                    on the assignment circumstances.
+
+                    Relocentra currently uses separately entered housing costs
+                    and taxable accommodation benefit values. These amounts
+                    are assumptions and may not be equal.
+
+                    Accommodation valuation, eligibility for relief and the
+                    applicable secondment rules require verification.
+                </p>
+            </div>
+            
+            {% if result.year1.housing and result.year2.housing %}
+
+            <h2>Detailed Accommodation Assessment</h2>
+
+            <p class="subtitle">
+                Accommodation expenditure and taxable benefit values are
+                calculated separately. Tax relief depends on the selected
+                assignment circumstances and eligibility conditions.
+            </p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Component</th>
+                        <th>Year 1 (GBP)</th>
+                        <th>Year 2 (GBP)</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    <tr>
+                        <td>Gross Employer Housing Cost</td>
+                        <td>£{{ result.year1.housing.employer_cost|floatformat:2 }}</td>
+                        <td>£{{ result.year2.housing.employer_cost|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Employer Housing Recovery</td>
+                        <td>£{{ result.year1.housing.employer_recovery|floatformat:2 }}</td>
+                        <td>£{{ result.year2.housing.employer_recovery|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Net Employer Housing Cost</td>
+                        <td>£{{ result.year1.housing.employer_net_cost|floatformat:2 }}</td>
+                        <td>£{{ result.year2.housing.employer_net_cost|floatformat:2 }}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Gross Accommodation Benefit</td>
+                        <td>£{{ result.year1.housing.gross_benefit|floatformat:2 }}</td>
+                        <td>£{{ result.year2.housing.gross_benefit|floatformat:2 }}</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>Assumed Eligible Tax Relief</td>
+                        <td>
+                            {% if result.year1.housing.relief > 0 %}−{% endif %}£{{ result.year1.housing.relief|floatformat:2 }}
+                        </td>
+                        <td>
+                            {% if result.year2.housing.relief > 0 %}−{% endif %}£{{ result.year2.housing.relief|floatformat:2 }}
+                        </td>
+                    </tr>
+
+                    <tr class="total">
+                        <td>Taxable Accommodation Benefit</td>
+                        <td>£{{ result.year1.housing.taxable_benefit|floatformat:2 }}</td>
+                        <td>£{{ result.year2.housing.taxable_benefit|floatformat:2 }}</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>Eligibility Screening</td>
+                        <td>
+                            {% if result.year1.housing.eligibility == "potentially_qualifying" %}
+                                Potentially Qualifying
+                            {% elif result.year1.housing.eligibility == "not_qualifying" %}
+                                Not Qualifying
+                            {% else %}
+                                Requires Further Review
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if result.year2.housing.eligibility == "potentially_qualifying" %}
+                                Potentially Qualifying
+                            {% elif result.year2.housing.eligibility == "not_qualifying" %}
+                                Not Qualifying
+                            {% else %}
+                                Requires Further Review
+                            {% endif %}
+                        </td>
+                    </tr>
+
+                </tbody>
+            </table>
+
+            <p class="subtitle">
+                Eligibility screening is not a legal determination.
+                The relief amounts require supporting evidence and
+                must satisfy the applicable HMRC conditions.
+            </p>
+
+            {% endif %}
+
             <h2>Year 1 - UK Income Tax Calculation</h2>
 
             <table>
@@ -320,6 +689,34 @@
                 provisional until verified.
             </p>
             
+            <div class="source-links">
+                <p class="subtitle">
+                    <strong>Official Reference - UK Income Tax (2026/27)</strong>
+                </p>
+
+                <ul>
+                    {% for source in section_sources.year1_tax %}
+                    <li>
+                        <a href="{{ source.url }}"
+                        target="_blank"
+                        rel="noopener noreferrer">
+                            {{ source.title }}
+                        </a>
+
+                        {% if source.tax_year %}
+                            ({{ source.tax_year }})
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                <p class="subtitle">
+                    This reference provides the published tax rates and allowances.
+                    The applicability of individual tax treatments and gross-up
+                    assumptions requires separate verification.
+                </p>
+            </div>
+
             <h2>Year 2 - UK Income Tax Calculation</h2>
 
             <table>
@@ -374,6 +771,33 @@
                 remain subject to verification.
             </p>
             
+            <div class="source-links">
+                <p class="subtitle">
+                    <strong>Official Reference - UK Income Tax (2026/27))</strong>
+                </p>
+
+                <ul>
+                    {% for source in section_sources.year2_tax %}
+                    <li>
+                        <a href="{{ source.url }}"
+                        target="_blank"
+                        rel="noopener noreferrer">
+                            {{ source.title }}
+                        </a>
+
+                        {% if source.tax_year %}
+                            ({{ source.tax_year }})
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                <p class="subtitle">
+                    The 2026/27 UK income tax rates and allowances are
+                    applied to both assignment years.
+                </p>
+            </div>
+
             <h2>Year 1 - Relocation Expenses and Tax Treatment</h2>
 
             <table>
@@ -429,6 +853,39 @@
                 and require verification against applicable HMRC rules.
             </p>
             
+            <div class="source-links">
+                <p class="subtitle">
+                    <strong>Official References - Relocation Expenses and Exemptions</strong>
+                </p>
+
+                <ul>
+                    {% for source in section_sources.relocation %}
+                    <li>
+                        <a href="{{ source.url }}"
+                        target="_blank"
+                        rel="noopener noreferrer">
+                            {{ source.title }}
+                        </a>
+
+                        {% if source.tax_year %}
+                            ({{ source.tax_year }})
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                <p class="subtitle">
+                    HMRC guidance explains qualifying relocation expenses,
+                    available exemptions, temporary accommodation and
+                    reporting requirements.
+
+                    The applicable exemptions and tax treatment depend on
+                    the employee's circumstances, expense eligibility and
+                    payment arrangements. These assumptions require
+                    verification before the estimate is finalised.
+                </p>
+            </div>
+
             <h2>UK Employer National Insurance</h2>
 
             {% if result.year1.uk_ni.illustrative %}
@@ -486,9 +943,101 @@
             <p>UK National Insurance liability requires verification.</p>
 
             {% endif %}
+            
+            <div class="source-links">
+                <p class="subtitle">
+                    <strong>Official References — UK Employer National Insurance</strong>
+                </p>
+
+                <ul>
+                    {% for source in section_sources.uk_ni %}
+                    <li>
+                        <a href="{{ source.url }}"
+                        target="_blank"
+                        rel="noopener noreferrer">
+                            {{ source.title }}
+                        </a>
+
+                        {% if source.tax_year %}
+                            ({{ source.tax_year }})
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                <p class="subtitle">
+                    HMRC publishes the applicable employer National Insurance
+                    rates and thresholds. UK-Swiss social security guidance
+                    explains the conditions for continued Swiss coverage.
+
+                    The illustrative NI calculations are excluded from the
+                    assignment totals until liability is established.
+                    Applicable thresholds and benefit classifications
+                    require further verification.
+                </p>
+            </div>
+            
+            {% if result.year1.employee_ni and result.year2.employee_ni %}
+
+            <h2>Illustrative UK Employee National Insurance</h2>
+
+            <p class="subtitle">
+                Estimated employee National Insurance if UK social
+                security applies instead of Swiss coverage.
+            </p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Component</th>
+                        <th>Year 1 (GBP)</th>
+                        <th>Year 2 (GBP)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Main Rate Contribution</td>
+                        <td>£{{ result.year1.employee_ni.main|floatformat:2 }}</td>
+                        <td>£{{ result.year2.employee_ni.main|floatformat:2 }}</td>
+                    </tr>
+                    <tr>
+                        <td>Higher Rate Contribution</td>
+                        <td>£{{ result.year1.employee_ni.higher|floatformat:2 }}</td>
+                        <td>£{{ result.year2.employee_ni.higher|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="total">
+                        <td>Total Employee NI</td>
+                        <td>£{{ result.year1.employee_ni.total|floatformat:2 }}</td>
+                        <td>£{{ result.year2.employee_ni.total|floatformat:2 }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p class="subtitle">
+                These are annualised illustrative employee contributions.
+                They are excluded from employer cost totals.
+                Employer funding of employee NI would require a separate
+                tax equalisation calculation.
+            </p>
+
+            {% endif %}
 
             <h2>Social Security Coverage</h2>
+            
+            <p class="subtitle">
+                <strong>Assessment for this assignment:</strong>
+                Swiss social security is expected to continue during the
+                24-month UK posting, provided the employee meets the
+                posted-worker conditions and obtains a valid Swiss A1
+                certificate covering the assignment.
+            </p>
 
+            <p class="subtitle">
+                Without confirmed coverage, UK National Insurance remains
+                an alternative scenario requiring assessment.
+                Swiss and UK employer contributions are not added together.
+            </p>
+              
             <p>
                 <strong>Year 1:</strong>
                 {{ result.year1.coverage.status }}
@@ -498,6 +1047,34 @@
                 <strong>Year 2:</strong>
                 {{ result.year2.coverage.status }}
             </p>
+            
+            <div class="source-links">
+                <p class="subtitle">
+                    <strong>Official Reference — UK–Swiss Social Security Coverage</strong>
+                </p>
+
+                <ul>
+                    {% for source in section_sources.coverage %}
+                    <li>
+                        <a href="{{ source.url }}"
+                        target="_blank"
+                        rel="noopener noreferrer">
+                            {{ source.title }}
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                <p class="subtitle">
+                    A temporary assignment from Switzerland to the UK may
+                    remain subject to Swiss social security, depending on
+                    the applicable rules and certificate of coverage.
+
+                    Relocentra treats coverage as unverified unless a valid
+                    Swiss certificate covering the assignment is confirmed.
+                    Actual contribution obligations must be verified.
+                </p>
+            </div>
 
             {% if result.summary.provisional %}
             <div class="warning">
@@ -512,6 +1089,39 @@
             {% endif %}
         </section>
         {% endif %}
+        
+        <section class="card">
+            <h2>Official Sources and References</h2>
+
+            <p class="subtitle">
+                The following official sources provide reference information
+                for the tax, social security and relocation calculations.
+                Some assumptions and eligibility conditions still require
+                verification.
+            </p>
+
+            {% for category, references in source_groups.items %}
+
+            <h3>{{ category }}</h3>
+
+            <ul>
+                {% for source in references %}
+                <li>
+                    <a href="{{ source.url }}"
+                    target="_blank"
+                    rel="noopener noreferrer">
+                        {{ source.title }}
+                    </a>
+
+                    {% if source.tax_year %}
+                        ({{ source.tax_year }})
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+
+            {% endfor %}
+        </section>
 
     </main>
 </body>

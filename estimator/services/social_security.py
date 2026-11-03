@@ -66,6 +66,31 @@ def uk_employer_ni(earnings, threshold):
 
     return taxable * Decimal("0.15")
 
+# Calculate standard UK employee Class 1 National Insurance
+def uk_employee_ni(earnings):
+    try:
+        income = Decimal(str(earnings))
+    except (InvalidOperation, ValueError, TypeError):
+        raise ValueError("Invalid UK employee earnings.")
+
+    if not income.is_finite() or income < 0:
+        raise ValueError("Employee earnings must be finite and non-negative.")
+
+    primary = Decimal("12570")
+    upper = Decimal("50270")
+
+    main_band = max(min(income, upper) - primary, Decimal("0"))
+    higher_band = max(income - upper, Decimal("0"))
+
+    main_ni = main_band * Decimal("0.08")
+    higher_ni = higher_band * Decimal("0.02")
+
+    return {
+        "main": main_ni,
+        "higher": higher_ni,
+        "total": main_ni + higher_ni
+    }
+
 # Calculate UK employer Class 1A National Insurance on applicable benefits
 def uk_class1a_ni(benefits):
     benefits = Decimal(str(benefits))

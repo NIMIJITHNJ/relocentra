@@ -6,9 +6,19 @@ from estimator.services.uk_tax import personal_allowance, uk_incometax
 from estimator.services.gross_up import tax_grossup
 from estimator.services.swiss_tax import swiss_incometax
 from estimator.services.social_security import employee_social, employer_social, coverage_status, uk_employer_ni, uk_class1a_ni, uk_ni_charges, ni_scenario
-from estimator.services.benefits import relocation_relief, housing_cost, housing_tax, relocation_cash, benefit_values, relocation_split, relocation_tax
+from estimator.services.benefits import relocation_relief, housing_cost, housing_tax, relocation_cash, benefit_values, relocation_split, relocation_tax, housing_value, housing_extra, housing_assessment
 from estimator.services.cost_estimate import year_cost, assignment_total, home_pay, hypo_deductions, year_benefits, grossup_base, host_tax, swiss_charges, estimate_year, estimate_assignment
-from estimator.forms import AssignmentCostForm
+from estimator.forms import AssignmentCostForm, AccommodationAssessmentForm
+from estimator.sources import SOURCE_GROUPS
+
+QUALIFYING_ASSIGNMENT = {
+    "employment": "continuing",
+    "temporary_purpose": True,
+    "expected_months": 24,
+    "work_percent": 100,
+    "additional_cost": True,
+    "reasonable_cost": True
+}
 
 class CurrencyConversionTests(SimpleTestCase):
 
@@ -203,6 +213,28 @@ class IncomeTaxTests(SimpleTestCase):
             with self.subTest(income=income):
                 result = uk_incometax(income)
                 self.assertEqual(result, Decimal(expected))
+    
+    # Test UK income tax at important threshold boundaries
+    def test_uk_tax_boundaries(self):
+        scenarios = [
+            ("12570", "0"),
+            ("12571", "0.20"),
+            ("50270", "7540.00"),
+            ("50271", "7540.40"),
+            ("100000", "27432.00"),
+            ("100001", "27432.60"),
+            ("112570", "34974.00"),
+            ("125139", "42515.40"),
+            ("125140", "42516.00"),
+            ("125141", "42516.45"),
+        ]
+
+        for income, expected in scenarios:
+            with self.subTest(income=income):
+                self.assertEqual(
+                    uk_incometax(income),
+                    Decimal(expected)
+                )
 
 class GrossUpTests(SimpleTestCase):
 
@@ -246,7 +278,32 @@ class GrossUpTests(SimpleTestCase):
         tax.quantize(Decimal("0.01")),
         Decimal("97641.82")
     )
+    
+    # Verify gross-up against independently calculated results
+    def test_grossup_independent(self):
+        scenarios = [
+            ("20000", "1857.50"),
+            ("50000", "12386.67"),
+            ("150000", "97641.82"),
+        ]
 
+        for income, expected in scenarios:
+            with self.subTest(income=income):
+                result = tax_grossup(income)
+
+                self.assertEqual(
+                    result.quantize(Decimal("0.01")),
+                    Decimal(expected)
+                )
+
+                calculated_tax = uk_incometax(
+                    Decimal(income) + result
+                )
+
+                self.assertLess(
+                    abs(result - calculated_tax),
+                    Decimal("0.00001")
+                )
 
 class SwissTaxTests(SimpleTestCase):
 
@@ -707,6 +764,401 @@ class BenefitsTests(SimpleTestCase):
                 self.assertEqual(result["p11d_value"], Decimal(p11d))
                 self.assertEqual(result["uk_class1_base"], Decimal(class1))
                 self.assertEqual(result["uk_class1a_base"], Decimal(class1a))
+    
+    # Test basic accommodation benefit valuation
+    def test_housing_value(self):
+        result = housing_value("36000", "30000", "2000")
+
+        self.assertEqual(
+            result["basic_value"],
+            Decimal("34000")
+        )
+
+        self.assertEqual(
+            result["annual_rent"],
+            Decimal("36000")
+        )
+
+        higher_value = housing_value("24000", "28000", "1000")
+
+        self.assertEqual(
+            higher_value["basic_value"],
+            Decimal("27000")
+        )
+
+        fully_paid = housing_value("12000", "10000", "15000")
+
+        self.assertEqual(
+            fully_paid["basic_value"],
+            Decimal("0")
+        )
+
+    # Test invalid accommodation benefit inputs
+    def test_housing_value_invalid(self):
+        invalid = [
+            ("-100", "30000", "0"),
+            ("36000", "-100", "0"),
+            ("36000", "30000", "-100"),
+            ("NaN", "30000", "0"),
+            ("36000", "Infinity", "0"),
+            ("invalid", "30000", "0")
+        ]
+
+        for rent, value, contribution in invalid:
+            with self.subTest(rent=rent, value=value):
+                with self.assertRaises(ValueError):
+                    housing_value(rent, value, contribution)
+    
+    # Test additional accommodation charges against HMRC examples
+    def test_housing_extra(self):
+        example = housing_extra(
+            "0", "1000", "175000", "0.04", "1250"
+        )
+
+        self.assertEqual(
+            example["basic_value"],
+            Decimal("0")
+        )
+
+        self.assertEqual(
+            example["additional_value"],
+            Decimal("3750.00")
+        )
+
+        self.assertEqual(
+            example["taxable_value"],
+            Decimal("3750.00")
+        )
+
+        second = housing_extra(
+            "0", "1000", "175000", "0.0725", "1500"
+        )
+
+        self.assertEqual(
+            second["taxable_value"],
+            Decimal("6750.0000")
+        )
+
+        threshold = housing_extra(
+            "36000", "30000", "75000", "0.04"
+        )
+
+        self.assertEqual(
+            threshold["additional_value"],
+            Decimal("0")
+        )
+
+        self.assertEqual(
+            threshold["taxable_value"],
+            Decimal("36000")
+        )
+
+    # Test invalid additional accommodation charge inputs
+    def test_housing_extra_invalid(self):
+        invalid = [
+            ("36000", "30000", "-100", "0.04"),
+            ("36000", "30000", "175000", "-0.01"),
+            ("36000", "30000", "175000", "1.50"),
+            ("36000", "30000", "NaN", "0.04"),
+            ("36000", "30000", "175000", "Infinity")
+        ]
+
+        for rent, value, cost, rate in invalid:
+            with self.subTest(cost=cost, rate=rate):
+                with self.assertRaises(ValueError):
+                    housing_extra(rent, value, cost, rate)
+    
+    # Test accommodation benefit after eligible relief
+    def test_housing_tax_relief(self):
+        scenarios = [
+            ("36000", "0", "36000"),
+            ("36000", "12000", "24000"),
+            ("36000", "36000", "0"),
+            ("0", "0", "0")
+        ]
+
+        for gross, relief, expected in scenarios:
+            with self.subTest(gross=gross, relief=relief):
+                result = housing_tax(gross, relief)
+
+                self.assertEqual(
+                    result["taxable"],
+                    Decimal(expected)
+                )
+
+    # Test invalid accommodation relief amounts
+    def test_housing_tax_relief_invalid(self):
+        invalid = [
+            ("36000", "-100"),
+            ("36000", "40000"),
+            ("-100", "0"),
+            ("NaN", "0"),
+            ("36000", "Infinity")
+        ]
+
+        for gross, relief in invalid:
+            with self.subTest(gross=gross, relief=relief):
+                with self.assertRaises(ValueError):
+                    housing_tax(gross, relief)
+    
+    # Test combined accommodation expenditure and taxable benefit
+    def test_housing_assessment(self):
+        result = housing_assessment(
+            "3000", "30000", "75000", "0.04",
+            employee_rent="2000",
+            relief="10000",
+            relief_verified=True,
+            assignment=QUALIFYING_ASSIGNMENT
+        )
+
+        self.assertEqual(result["employer_cost"], Decimal("36000"))
+        self.assertEqual(result["basic_value"], Decimal("34000"))
+        self.assertEqual(result["additional_value"], Decimal("0"))
+        self.assertEqual(result["gross_benefit"], Decimal("34000"))
+        self.assertEqual(result["relief"], Decimal("10000"))
+        self.assertEqual(result["taxable_benefit"], Decimal("24000"))
+
+        extra = housing_assessment(
+            "1000", "15000", "175000", "0.04"
+        )
+
+        self.assertEqual(extra["employer_cost"], Decimal("12000"))
+        self.assertEqual(extra["basic_value"], Decimal("15000"))
+        self.assertEqual(extra["additional_value"], Decimal("4000"))
+        self.assertEqual(extra["gross_benefit"], Decimal("19000"))
+        self.assertEqual(extra["taxable_benefit"], Decimal("19000"))
+
+    # Test invalid combined accommodation inputs
+    def test_housing_assessment_invalid(self):
+        invalid = [
+            ("-3000", "30000", "75000", "0.04", "0"),
+            ("3000", "-100", "75000", "0.04", "0"),
+            ("3000", "30000", "-100", "0.04", "0"),
+            ("3000", "30000", "75000", "-0.04", "0"),
+            ("3000", "30000", "75000", "0.04", "50000")
+        ]
+
+        for rent, value, cost, rate, relief in invalid:
+            with self.subTest(rent=rent, relief=relief):
+                with self.assertRaises(ValueError):
+                    housing_assessment(
+                        rent, value, cost, rate, relief=relief, relief_verified=True
+                    )
+    
+    # Test employer housing recovery and net expenditure
+    def test_housing_recovery(self):
+        recovered = housing_assessment(
+            "3000", "30000", "75000", "0.04",
+            employee_rent="2000",
+            relief="10000",
+            employer_recovery="2000",
+            relief_verified=True,
+            assignment=QUALIFYING_ASSIGNMENT
+        )
+
+        self.assertEqual(
+            recovered["employer_cost"],
+            Decimal("36000")
+        )
+
+        self.assertEqual(
+            recovered["employer_recovery"],
+            Decimal("2000")
+        )
+
+        self.assertEqual(
+            recovered["employer_net_cost"],
+            Decimal("34000")
+        )
+
+        self.assertEqual(
+            recovered["taxable_benefit"],
+            Decimal("24000")
+        )
+
+        no_recovery = housing_assessment(
+            "3000", "30000", "75000", "0.04",
+            employee_rent="2000",
+            relief="10000",
+            relief_verified=True,
+            assignment=QUALIFYING_ASSIGNMENT
+        )
+
+        self.assertEqual(
+            no_recovery["employer_recovery"],
+            Decimal("0")
+        )
+
+        self.assertEqual(
+            no_recovery["employer_net_cost"],
+            Decimal("36000")
+        )
+
+        self.assertEqual(
+            no_recovery["taxable_benefit"],
+            recovered["taxable_benefit"]
+        )
+
+    # Test invalid employer housing recovery amounts
+    def test_housing_recovery_invalid(self):
+        invalid = [
+            "-100",
+            "37000",
+            "NaN",
+            "Infinity",
+            "invalid"
+        ]
+
+        for recovery in invalid:
+            with self.subTest(recovery=recovery):
+                with self.assertRaises(ValueError):
+                    housing_assessment(
+                        "3000", "30000", "75000", "0.04",
+                        employer_recovery=recovery
+                    )
+    
+    # Test accommodation relief eligibility confirmation
+    def test_housing_relief_verification(self):
+        inputs = ("3000", "30000", "75000", "0.04")
+
+        with self.assertRaises(ValueError):
+            housing_assessment(
+                *inputs,
+                relief="10000",
+                relief_verified=False
+            )
+
+        verified = housing_assessment(
+            *inputs,
+            relief="10000",
+            relief_verified=True,
+            assignment=QUALIFYING_ASSIGNMENT
+        )
+
+        self.assertEqual(
+            verified["taxable_benefit"],
+            Decimal("26000")
+        )
+
+        self.assertTrue(verified["relief_verified"])
+
+        no_relief = housing_assessment(
+            *inputs,
+            relief="0",
+            relief_verified=False
+        )
+
+        self.assertEqual(
+            no_relief["taxable_benefit"],
+            Decimal("36000")
+        )
+
+        with self.assertRaises(ValueError):
+            housing_assessment(
+                *inputs,
+                relief_verified="yes"
+            )
+    
+    # Test accommodation eligibility under different assignment conditions
+    def test_housing_eligibility(self):
+        assignment = {
+            "employment": "continuing",
+            "temporary_purpose": True,
+            "expected_months": 24,
+            "work_percent": 100,
+            "additional_cost": True,
+            "reasonable_cost": True
+        }
+
+        qualifying = housing_assessment(
+            "3000", "30000", "75000", "0.0375",
+            relief="10000",
+            relief_verified=True,
+            assignment=assignment
+        )
+
+        self.assertEqual(
+            qualifying["eligibility"],
+            "potentially_qualifying"
+        )
+
+        self.assertEqual(
+            qualifying["taxable_benefit"],
+            Decimal("26000")
+        )
+
+        new_employment = housing_assessment(
+            "3000", "30000", "75000", "0.0375",
+            assignment={**assignment, "employment": "new"}
+        )
+
+        self.assertEqual(
+            new_employment["eligibility"],
+            "requires_review"
+        )
+
+        extended = housing_assessment(
+            "3000", "30000", "75000", "0.0375",
+            assignment={
+                **assignment,
+                "expected_months": 30,
+                "work_percent": 40
+            }
+        )
+
+        self.assertEqual(
+            extended["eligibility"],
+            "not_qualifying"
+        )
+
+        uncertain = housing_assessment(
+            "3000", "30000", "75000", "0.0375",
+            assignment={**assignment, "reasonable_cost": None}
+        )
+
+        self.assertEqual(
+            uncertain["eligibility"],
+            "requires_review"
+        )
+
+    # Test accommodation relief rejection and invalid assignment inputs
+    def test_housing_eligibility_invalid(self):
+        assignment = {
+            "employment": "continuing",
+            "temporary_purpose": True,
+            "expected_months": 24,
+            "additional_cost": True,
+            "reasonable_cost": True
+        }
+
+        with self.assertRaises(ValueError):
+            housing_assessment(
+                "3000", "30000", "75000", "0.0375",
+                relief="10000",
+                relief_verified=True,
+                assignment={**assignment, "employment": "new"}
+            )
+
+        with self.assertRaises(ValueError):
+            housing_assessment(
+                "3000", "30000", "75000", "0.0375",
+                relief="10000",
+                relief_verified=True,
+                assignment={**assignment, "reasonable_cost": None}
+            )
+
+        for changes in (
+            {"expected_months": 0},
+            {"work_percent": 101},
+            {"employment": "invalid"},
+            {"temporary_purpose": "yes"}
+        ):
+            with self.subTest(changes=changes):
+                with self.assertRaises(ValueError):
+                    housing_assessment(
+                        "3000", "30000", "75000", "0.0375",
+                        assignment={**assignment, **changes}
+                    )
 
 class EmployerCostTests(SimpleTestCase):
 
@@ -1447,6 +1899,7 @@ class EmployerCostTests(SimpleTestCase):
         expected_class1 = (
             unverified["pay"]["total"]
             + unverified["benefits"]["relocation"]
+            + unverified["tax"]["employer_tax"]
             - Decimal("5000")
         ) * Decimal("0.15")
 
@@ -1515,6 +1968,532 @@ class EmployerCostTests(SimpleTestCase):
         self.assertEqual(
             confirmed["summary"]["total"],
             unverified["summary"]["total"]
+        )
+    
+    # Test manual and assessed accommodation calculation modes
+    def test_year_housing_modes(self):
+        inputs = {
+            "year": 1,
+            "salary": "150000",
+            "bonus": "20000",
+            "rate": "1.10",
+            "swiss_tax": "29578",
+            "monthly_rent": "3000",
+            "relocation": "5000",
+            "moving": "6000",
+            "temporary": "4000"
+        }
+
+        manual = estimate_year(
+            **inputs,
+            taxable_kind="36000"
+        )
+
+        assessed = estimate_year(
+            **inputs,
+            taxable_kind="0",
+            housing_data={
+                "annual_value": "30000",
+                "property_cost": "75000",
+                "interest_rate": "0.04",
+                "employee_rent": "2000",
+                "relief": "10000",
+                "relief_verified": True,
+                "assignment": QUALIFYING_ASSIGNMENT
+            }
+        )
+
+        self.assertIsNone(manual["housing"])
+
+        self.assertEqual(
+            manual["taxable"]["total_taxable"].quantize(Decimal("0.01")),
+            Decimal("50545.45")
+        )
+
+        self.assertEqual(
+            assessed["housing"]["employer_cost"],
+            Decimal("36000")
+        )
+
+        self.assertEqual(
+            assessed["housing"]["basic_value"],
+            Decimal("34000")
+        )
+
+        self.assertEqual(
+            assessed["housing"]["taxable_benefit"],
+            Decimal("24000")
+        )
+
+        self.assertEqual(
+            assessed["taxable"]["total_taxable"].quantize(Decimal("0.01")),
+            Decimal("38545.45")
+        )
+
+        self.assertEqual(
+            manual["benefits"]["total"],
+            assessed["benefits"]["total"]
+        )
+
+        self.assertLess(
+            assessed["tax"]["employer_tax"],
+            manual["tax"]["employer_tax"]
+        )
+
+        self.assertLess(
+            assessed["cost"]["total"],
+            manual["cost"]["total"]
+        )
+
+        self.assertEqual(
+            assessed["uk_ni"]["illustrative"]["class1a"],
+            Decimal("6600.00")
+        )
+    
+    # Test separate accommodation assessments across both years
+    def test_assignment_housing(self):
+        inputs = {
+            "salary": "150000",
+            "bonus": "20000",
+            "rate": "1.10",
+            "swiss_tax": "29578",
+            "monthly_rent": "3000",
+            "relocation": "5000",
+            "moving": "6000",
+            "temporary": "4000"
+        }
+
+        manual = estimate_assignment(
+            **inputs,
+            taxable_kind1="36000",
+            taxable_kind2="36000"
+        )
+
+        assessed = estimate_assignment(
+            **inputs,
+            taxable_kind1="0",
+            taxable_kind2="0",
+            housing_data1={
+                "annual_value": "30000",
+                "property_cost": "75000",
+                "interest_rate": "0.04",
+                "employee_rent": "2000",
+                "relief": "10000",
+                "relief_verified": True,
+                "assignment": QUALIFYING_ASSIGNMENT
+            },
+            housing_data2={
+                "annual_value": "40000",
+                "property_cost": "75000",
+                "interest_rate": "0.04",
+                "employee_rent": "1000",
+                "relief": "0"
+            }
+        )
+
+        self.assertIsNone(manual["year1"]["housing"])
+        self.assertIsNone(manual["year2"]["housing"])
+
+        self.assertEqual(
+            assessed["year1"]["housing"]["taxable_benefit"],
+            Decimal("24000")
+        )
+
+        self.assertEqual(
+            assessed["year2"]["housing"]["taxable_benefit"],
+            Decimal("39000")
+        )
+
+        for year in ("year1", "year2"):
+            self.assertEqual(
+                manual[year]["benefits"]["total"],
+                assessed[year]["benefits"]["total"]
+            )
+
+        self.assertLess(
+            assessed["year1"]["tax"]["employer_tax"],
+            manual["year1"]["tax"]["employer_tax"]
+        )
+
+        self.assertGreater(
+            assessed["year2"]["tax"]["employer_tax"],
+            manual["year2"]["tax"]["employer_tax"]
+        )
+
+        self.assertEqual(
+            assessed["summary"]["total"],
+            assessed["year1"]["cost"]["total"]
+            + assessed["year2"]["cost"]["total"]
+        )
+    
+    # Test housing recovery in the annual employer cost
+    def test_year_housing_recovery(self):
+        inputs = {
+            "year": 1,
+            "salary": "150000",
+            "bonus": "20000",
+            "rate": "1.10",
+            "swiss_tax": "29578",
+            "monthly_rent": "3000",
+            "relocation": "5000",
+            "moving": "6000",
+            "temporary": "4000",
+            "taxable_kind": "0"
+        }
+
+        housing = {
+            "annual_value": "30000",
+            "property_cost": "75000",
+            "interest_rate": "0.04",
+            "employee_rent": "2000",
+            "relief": "10000",
+            "relief_verified": True,
+            "assignment": QUALIFYING_ASSIGNMENT
+        }
+
+        original = estimate_year(
+            **inputs,
+            housing_data=housing
+        )
+
+        recovered = estimate_year(
+            **inputs,
+            housing_data={
+                **housing,
+                "employer_recovery": "2000"
+            }
+        )
+
+        self.assertEqual(
+            recovered["benefits"]["housing_recovery"],
+            Decimal("2000")
+        )
+
+        self.assertEqual(
+            recovered["benefits"]["housing_net"],
+            Decimal("34000")
+        )
+
+        self.assertEqual(
+            recovered["benefits"]["gross_total"],
+            original["benefits"]["total"]
+        )
+
+        self.assertEqual(
+            original["benefits"]["total"] - recovered["benefits"]["total"],
+            Decimal("2000")
+        )
+
+        self.assertEqual(
+            original["housing"]["taxable_benefit"],
+            recovered["housing"]["taxable_benefit"]
+        )
+
+        self.assertEqual(
+            original["tax"]["employer_tax"],
+            recovered["tax"]["employer_tax"]
+        )
+
+        self.assertEqual(
+            original["cost"]["total"] - recovered["cost"]["total"],
+            Decimal("2000")
+        )
+
+        self.assertEqual(
+            original["uk_ni"],
+            recovered["uk_ni"]
+        )
+    
+    # Test partial and fully matching accommodation deductions for Class 1A
+    def test_housing_ni_relief(self):
+        inputs = {
+            "year": 1,
+            "salary": "150000",
+            "bonus": "20000",
+            "rate": "1.10",
+            "swiss_tax": "29578",
+            "monthly_rent": "3000",
+            "relocation": "5000",
+            "moving": "6000",
+            "temporary": "4000",
+            "taxable_kind": "0"
+        }
+
+        housing = {
+            "annual_value": "30000",
+            "property_cost": "75000",
+            "interest_rate": "0.04",
+            "employee_rent": "2000",
+            "relief_verified": True,
+            "assignment": QUALIFYING_ASSIGNMENT
+        }
+
+        partial = estimate_year(
+            **inputs,
+            housing_data={**housing, "relief": "10000"}
+        )
+
+        full = estimate_year(
+            **inputs,
+            housing_data={**housing, "relief": "34000"}
+        )
+
+        self.assertEqual(
+            partial["housing"]["gross_benefit"],
+            Decimal("34000")
+        )
+
+        self.assertEqual(
+            partial["housing"]["taxable_benefit"],
+            Decimal("24000")
+        )
+
+        self.assertEqual(
+            partial["uk_ni"]["illustrative"]["class1a"],
+            Decimal("6600.00")
+        )
+
+        self.assertEqual(
+            full["housing"]["taxable_benefit"],
+            Decimal("0")
+        )
+
+        self.assertEqual(
+            full["uk_ni"]["illustrative"]["class1a"],
+            Decimal("1500.00")
+        )
+
+        self.assertEqual(
+            partial["benefits"]["total"],
+            full["benefits"]["total"]
+        )
+    
+    # Test separate Swiss and UK employer cost scenarios
+    def test_employer_social_scenarios(self):
+        inputs = {
+            "year": 1,
+            "salary": Decimal("150000"),
+            "bonus": Decimal("20000"),
+            "rate": Decimal("1.10"),
+            "swiss_tax": Decimal("29578"),
+            "monthly_rent": Decimal("3000"),
+            "relocation": Decimal("5000"),
+            "moving": Decimal("6000"),
+            "temporary": Decimal("4000"),
+            "taxable_kind": Decimal("36000")
+        }
+
+        unverified = estimate_year(**inputs, certificate=False)
+
+        swiss_cost = unverified["cost"]
+        uk_cost = unverified["uk_cost"]
+        uk_ni = unverified["uk_ni"]["illustrative"]
+
+        self.assertIsNotNone(uk_cost)
+
+        self.assertEqual(
+            swiss_cost["employer_charges"],
+            unverified["charges"]["total"]
+        )
+
+        self.assertEqual(
+            uk_cost["employer_charges"],
+            uk_ni["total"]
+        )
+
+        self.assertEqual(
+            (uk_cost["total"] - swiss_cost["total"]).quantize(
+                Decimal("0.01")
+            ),
+            (uk_ni["total"] - unverified["charges"]["total"]).quantize(
+                Decimal("0.01")
+            )
+        )
+
+        confirmed = estimate_year(**inputs, certificate=True)
+
+        self.assertIsNone(confirmed["uk_cost"])
+        self.assertIsNone(confirmed["uk_ni"]["illustrative"])
+    
+    # Test the alternative two-year UK employer NI summary
+    def test_assignment_uk_ni_summary(self):
+        inputs = {
+            "salary": Decimal("150000"),
+            "bonus": Decimal("20000"),
+            "rate": Decimal("1.10"),
+            "swiss_tax": Decimal("29578"),
+            "monthly_rent": Decimal("3000"),
+            "relocation": Decimal("5000"),
+            "moving": Decimal("6000"),
+            "temporary": Decimal("4000"),
+            "taxable_kind1": Decimal("36000"),
+            "taxable_kind2": Decimal("36000")
+        }
+
+        unverified = estimate_assignment(**inputs, certificate=False)
+
+        uk_summary = unverified["uk_summary"]
+
+        self.assertIsNotNone(uk_summary)
+        self.assertTrue(uk_summary["provisional"])
+
+        self.assertEqual(
+            uk_summary["year1"],
+            unverified["year1"]["uk_cost"]["total"]
+        )
+
+        self.assertEqual(
+            uk_summary["year2"],
+            unverified["year2"]["uk_cost"]["total"]
+        )
+
+        self.assertEqual(
+            uk_summary["total"],
+            uk_summary["year1"] + uk_summary["year2"]
+        )
+
+        confirmed = estimate_assignment(**inputs, certificate=True)
+
+        self.assertIsNone(confirmed["uk_summary"])
+    
+    # Test employee NI under different coverage scenarios
+    def test_assignment_employee_ni(self):
+        from estimator.services.social_security import uk_employee_ni
+
+        inputs = {
+            "year": 1,
+            "salary": Decimal("150000"),
+            "bonus": Decimal("20000"),
+            "rate": Decimal("1.10"),
+            "swiss_tax": Decimal("29578"),
+            "monthly_rent": Decimal("3000"),
+            "relocation": Decimal("5000"),
+            "moving": Decimal("6000"),
+            "temporary": Decimal("4000"),
+            "taxable_kind": Decimal("36000")
+        }
+
+        unverified = estimate_year(**inputs, certificate=False)
+
+        earnings = (
+            unverified["pay"]["total"]
+            + unverified["benefits"]["relocation"]
+            + unverified["reporting"]["uk_class1_base"]
+            + unverified["tax"]["employer_tax"]
+        )
+
+        expected = uk_employee_ni(earnings)
+
+        self.assertEqual(
+            unverified["employee_ni"]["total"],
+            expected["total"]
+        )
+
+        confirmed = estimate_year(**inputs, certificate=True)
+
+        self.assertIsNone(confirmed["employee_ni"])
+
+        # Employee NI must not automatically increase employer costs
+        self.assertEqual(
+            unverified["cost"]["total"],
+            confirmed["cost"]["total"]
+        )
+    
+    # Test additional Swiss employer costs for both years
+    def test_additional_swiss_costs(self):
+        inputs = {
+            "salary": Decimal("150000"),
+            "bonus": Decimal("20000"),
+            "rate": Decimal("1.10"),
+            "swiss_tax": Decimal("29578"),
+            "monthly_rent": Decimal("3000"),
+            "relocation": Decimal("5000"),
+            "moving": Decimal("6000"),
+            "temporary": Decimal("4000"),
+            "taxable_kind1": Decimal("36000"),
+            "taxable_kind2": Decimal("36000")
+        }
+
+        original = estimate_assignment(**inputs)
+
+        updated = estimate_assignment(
+            **inputs,
+            additional_chf1=Decimal("1100"),
+            additional_chf2=Decimal("2200")
+        )
+
+        self.assertEqual(
+            updated["year1"]["charges"]["other"],
+            Decimal("1000")
+        )
+
+        self.assertEqual(
+            updated["year2"]["charges"]["other"],
+            Decimal("2000")
+        )
+        
+        # Verify additional costs are included in contribution totals
+        for year, expected in (
+            ("year1", Decimal("1000.00")),
+            ("year2", Decimal("2000.00"))
+        ):
+            difference = (
+                updated[year]["charges"]["total"]
+                - original[year]["charges"]["total"]
+            ).quantize(Decimal("0.01"))
+
+            self.assertEqual(difference, expected)
+
+        self.assertEqual(
+            (
+                updated["summary"]["total"]
+                - original["summary"]["total"]
+            ).quantize(Decimal("0.01")),
+            Decimal("3000.00")
+        )
+
+        self.assertEqual(
+            updated["uk_summary"]["total"],
+            original["uk_summary"]["total"]
+        )
+    
+    # Test the relocation exemption within the assignment calculation
+    def test_relocation_exemption(self):
+        result = estimate_assignment(
+            salary=150000,
+            bonus=20000,
+            rate=Decimal("1.10"),
+            swiss_tax=29578,
+            monthly_rent=3000,
+            relocation=5000,
+            moving=6000,
+            temporary=4000,
+            taxable_kind1=36000,
+            taxable_kind2=36000,
+            moving_ok=True,
+            temporary_ok=True
+        )
+
+        year1 = result["year1"]
+
+        self.assertEqual(
+            year1["relief"]["total_exempt"],
+            Decimal("8000")
+        )
+
+        self.assertEqual(
+            year1["reporting"]["total_taxable"],
+            Decimal("2000")
+        )
+
+        self.assertEqual(
+            year1["taxable"]["taxable_cash"],
+            year1["benefits"]["relocation"]
+        )
+
+        self.assertEqual(
+            result["year2"]["relief"]["total_exempt"],
+            Decimal("0")
         )
 
 class AssignmentCostFormTests(SimpleTestCase):
@@ -1626,7 +2605,7 @@ class AssignmentViewTests(SimpleTestCase):
 
         form = response.context["form"]
 
-        self.assertEqual(len(form.fields), 14)
+        self.assertEqual(len(form.fields), 16)
         self.assertEqual(form.initial.get("salary"), None)
         self.assertIsNone(response.context["result"])
 
@@ -1676,8 +2655,8 @@ class AssignmentViewTests(SimpleTestCase):
         unverified = self.client.post("/assignment/", data)
 
         self.assertEqual(unverified.status_code, 200)
-        self.assertContains(unverified, "£30013.64")
-        self.assertContains(unverified, "£27831.82")
+        self.assertContains(unverified, "£46933.91")
+        self.assertContains(unverified, "£42966.97")
         self.assertContains(unverified, "illustrative")
 
         data["certificate"] = "on"
@@ -1693,3 +2672,369 @@ class AssignmentViewTests(SimpleTestCase):
 
         self.assertNotContains(confirmed, "£30013.64")
         self.assertNotContains(confirmed, "£27831.82")
+    
+    # Test official source references on the assignment webpage
+    def test_assignment_sources(self):
+        response = self.client.get("/assignment/")
+
+        self.assertEqual(response.status_code, 200)
+
+        groups = response.context["source_groups"]
+
+        self.assertEqual(len(groups), 5)
+
+        expected = {
+            "UK Income Tax": 1,
+            "Swiss Tax and Social Security": 3,
+            "UK National Insurance and Coverage": 2,
+            "Accommodation and Secondment": 3,
+            "Relocation Expenses and Exemptions": 4,
+        }
+
+        for category, count in expected.items():
+            with self.subTest(category=category):
+                self.assertIn(category, groups)
+                self.assertEqual(len(groups[category]), count)
+                self.assertContains(response, category)
+
+        self.assertEqual(
+            sum(len(sources) for sources in groups.values()),
+            13
+        )
+
+        for sources in SOURCE_GROUPS.values():
+            for source in sources:
+                with self.subTest(source=source["title"]):
+                    self.assertContains(response, source["title"])
+                    self.assertContains(
+                        response,
+                        f'href="{source["url"]}"'
+                    )
+    
+    # Test contextual source links in assignment results
+    def test_contextual_sources(self):
+        data = {
+            "salary": "150000",
+            "bonus": "20000",
+            "rate": "1.10",
+            "swiss_tax": "29578",
+            "monthly_rent": "3000",
+            "relocation": "5000",
+            "moving": "6000",
+            "temporary": "4000",
+            "taxable_kind1": "36000",
+            "taxable_kind2": "36000",
+            "payment": "employer_direct"
+        }
+
+        response = self.client.post("/assignment/", data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].is_valid())
+
+        groups = response.context["source_groups"]
+        sections = response.context["section_sources"]
+
+        self.assertEqual(len(sections), 8)
+
+        counts = {}
+
+        for sources in groups.values():
+            for source in sources:
+                url = source["url"]
+                counts[url] = counts.get(url, 0) + 1
+
+        for sources in sections.values():
+            for source in sources:
+                url = source["url"]
+                counts[url] = counts.get(url, 0) + 1
+
+        self.assertEqual(len(counts), 13)
+        self.assertEqual(sum(counts.values()), 28)
+
+        for url, count in counts.items():
+            with self.subTest(url=url):
+                self.assertContains(
+                    response,
+                    f'href="{url}"',
+                    count=count
+                )
+    
+    # Test financial calculation errors in the assignment form
+    def test_assignment_financial_error(self):
+        data = {
+            "salary": "150000",
+            "bonus": "20000",
+            "rate": "1.10",
+            "swiss_tax": "300000",
+            "monthly_rent": "3000",
+            "relocation": "5000",
+            "moving": "6000",
+            "temporary": "4000",
+            "taxable_kind1": "36000",
+            "taxable_kind2": "36000",
+            "payment": "employer_direct"
+        }
+
+        response = self.client.post("/assignment/", data)
+
+        self.assertEqual(response.status_code, 200)
+
+        form = response.context["form"]
+
+        self.assertFalse(form.is_valid())
+
+        self.assertIn(
+            "Hypothetical deductions cannot exceed home pay.",
+            form.non_field_errors()
+        )
+
+        self.assertIsNone(response.context["result"])
+
+        self.assertContains(
+            response,
+            "Hypothetical deductions cannot exceed home pay."
+        )
+    
+    # Test detailed accommodation assessment through the Django webpage
+    def test_assignment_assessed_housing(self):
+        data = {
+            "salary": "150000",
+            "bonus": "20000",
+            "rate": "1.10",
+            "swiss_tax": "29578",
+            "monthly_rent": "3000",
+            "relocation": "5000",
+            "moving": "6000",
+            "temporary": "4000",
+            "taxable_kind1": "0",
+            "taxable_kind2": "0",
+            "payment": "employer_direct",
+            "housing_mode": "assessed",
+
+            "housing1-annual_value": "30000",
+            "housing1-property_cost": "75000",
+            "housing1-interest_rate": "0.0375",
+            "housing1-employee_rent": "2000",
+            "housing1-employer_recovery": "0",
+            "housing1-relief": "10000",
+            "housing1-employment": "continuing",
+            "housing1-temporary_purpose": "yes",
+            "housing1-expected_months": "24",
+            "housing1-work_percent": "100",
+            "housing1-additional_cost": "yes",
+            "housing1-reasonable_cost": "yes",
+            "housing1-relief_verified": "on",
+
+            "housing2-annual_value": "40000",
+            "housing2-property_cost": "75000",
+            "housing2-interest_rate": "0.0375",
+            "housing2-employee_rent": "1000",
+            "housing2-employer_recovery": "0",
+            "housing2-relief": "0",
+            "housing2-employment": "unknown",
+            "housing2-temporary_purpose": "unknown",
+            "housing2-expected_months": "24",
+            "housing2-work_percent": "100",
+            "housing2-additional_cost": "unknown",
+            "housing2-reasonable_cost": "unknown"
+        }
+
+        response = self.client.post("/assignment/", data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].is_valid())
+        self.assertTrue(response.context["housing_form1"].is_valid())
+        self.assertTrue(response.context["housing_form2"].is_valid())
+
+        result = response.context["result"]
+        self.assertIsNotNone(result)
+
+        year1 = result["year1"]
+        year2 = result["year2"]
+
+        self.assertEqual(
+            year1["housing"]["taxable_benefit"],
+            Decimal("24000")
+        )
+
+        self.assertEqual(
+            year2["housing"]["taxable_benefit"],
+            Decimal("39000")
+        )
+
+        self.assertEqual(
+            year1["housing"]["eligibility"],
+            "potentially_qualifying"
+        )
+
+        self.assertEqual(
+            year2["housing"]["eligibility"],
+            "requires_review"
+        )
+
+        self.assertEqual(
+            year1["taxable"]["total_taxable"].quantize(Decimal("0.01")),
+            Decimal("38545.45")
+        )
+
+        self.assertEqual(
+            year2["taxable"]["total_taxable"],
+            Decimal("39000")
+        )
+
+        self.assertEqual(
+            result["summary"]["total"],
+            year1["cost"]["total"] + year2["cost"]["total"]
+        )
+        
+        # Test rejection of unsupported accommodation relief
+        invalid_data = data.copy()
+        invalid_data["housing1-employment"] = "new"
+
+        invalid = self.client.post("/assignment/", invalid_data)
+
+        self.assertEqual(invalid.status_code, 200)
+
+        self.assertTrue(
+            invalid.context["housing_form1"].is_valid()
+        )
+
+        self.assertIsNone(
+            invalid.context["result"]
+        )
+
+        self.assertIn(
+            "Accommodation relief is not supported by the assignment conditions.",
+            invalid.context["form"].non_field_errors()
+        )
+
+class AccommodationAssessmentFormTests(SimpleTestCase):
+
+    # Test valid accommodation assessment inputs
+    def test_valid_accommodation(self):
+        data = {
+            "annual_value": "30000",
+            "property_cost": "75000",
+            "interest_rate": "0.0375",
+            "employee_rent": "2000",
+            "employer_recovery": "2000",
+            "relief": "10000",
+            "employment": "continuing",
+            "temporary_purpose": "yes",
+            "expected_months": "24",
+            "work_percent": "100",
+            "additional_cost": "yes",
+            "reasonable_cost": "yes",
+            "relief_verified": "on"
+        }
+
+        form = AccommodationAssessmentForm(data)
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["annual_value"], Decimal("30000"))
+        self.assertEqual(form.cleaned_data["interest_rate"], Decimal("0.0375"))
+        self.assertEqual(form.cleaned_data["expected_months"], 24)
+        self.assertEqual(form.cleaned_data["employment"], "continuing")
+        self.assertTrue(form.cleaned_data["relief_verified"])
+
+    # Test invalid accommodation assessment inputs
+    def test_invalid_accommodation(self):
+        data = {
+            "annual_value": "-100",
+            "property_cost": "75000",
+            "interest_rate": "1.50",
+            "employee_rent": "0",
+            "employer_recovery": "0",
+            "relief": "0",
+            "employment": "continuing",
+            "temporary_purpose": "unknown",
+            "expected_months": "0",
+            "work_percent": "101",
+            "additional_cost": "unknown",
+            "reasonable_cost": "unknown"
+        }
+
+        form = AccommodationAssessmentForm(data)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("annual_value", form.errors)
+        self.assertIn("interest_rate", form.errors)
+        self.assertIn("expected_months", form.errors)
+        self.assertIn("work_percent", form.errors)
+    
+    # Test accommodation form data conversion
+    def test_housing_data(self):
+        data = {
+            "annual_value": "30000",
+            "property_cost": "75000",
+            "interest_rate": "0.0375",
+            "employee_rent": "2000",
+            "employer_recovery": "2000",
+            "relief": "10000",
+            "employment": "continuing",
+            "temporary_purpose": "yes",
+            "expected_months": "24",
+            "work_percent": "100",
+            "additional_cost": "yes",
+            "reasonable_cost": "unknown",
+            "relief_verified": "on"
+        }
+
+        form = AccommodationAssessmentForm(data)
+        housing = form.housing_data()
+
+        self.assertEqual(housing["annual_value"], Decimal("30000"))
+        self.assertEqual(housing["interest_rate"], Decimal("0.0375"))
+        self.assertEqual(housing["relief"], Decimal("10000"))
+        self.assertTrue(housing["relief_verified"])
+
+        assignment = housing["assignment"]
+
+        self.assertEqual(assignment["employment"], "continuing")
+        self.assertTrue(assignment["temporary_purpose"])
+        self.assertTrue(assignment["additional_cost"])
+        self.assertIsNone(assignment["reasonable_cost"])
+        self.assertEqual(assignment["expected_months"], 24)
+
+    # Test rejection of invalid accommodation form data
+    def test_housing_data_invalid(self):
+        form = AccommodationAssessmentForm({
+            "annual_value": "-100",
+            "property_cost": "75000",
+            "interest_rate": "0.0375"
+        })
+
+        with self.assertRaises(ValueError):
+            form.housing_data()
+
+class UKEmployeeNITests(SimpleTestCase):
+
+    # Test UK employee National Insurance calculations
+    def test_employee_ni(self):
+        from estimator.services.social_security import uk_employee_ni
+
+        cases = [
+            ("12000", "0"),
+            ("12570", "0"),
+            ("50270", "3016"),
+            ("60000", "3210.60")
+        ]
+
+        for earnings, expected in cases:
+            with self.subTest(earnings=earnings):
+                result = uk_employee_ni(earnings)
+
+                self.assertEqual(
+                    result["total"],
+                    Decimal(expected)
+                )
+
+    # Test invalid employee earnings
+    def test_employee_ni_invalid(self):
+        from estimator.services.social_security import uk_employee_ni
+
+        for earnings in ("-100", "NaN", "Infinity"):
+            with self.subTest(earnings=earnings):
+                with self.assertRaises(ValueError):
+                    uk_employee_ni(earnings)

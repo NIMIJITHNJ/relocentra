@@ -76,6 +76,69 @@ def housing_cost(monthly_rent, months=12):
 
     return rent * months
 
+# Calculate the basic value of employer-rented accommodation
+def housing_value(annual_rent, annual_value, employee_rent=0):
+    try:
+        rent = Decimal(str(annual_rent))
+        value = Decimal(str(annual_value))
+        contribution = Decimal(str(employee_rent))
+    except (InvalidOperation, ValueError, TypeError):
+        raise ValueError("Invalid accommodation value.")
+
+    amounts = (rent, value, contribution)
+
+    if any(not amount.is_finite() or amount < 0 for amount in amounts):
+        raise ValueError("Accommodation amounts must be finite and non-negative.")
+
+    basic_value = max(
+        Decimal("0"),
+        max(rent, value) - contribution
+    )
+
+    return {
+        "annual_rent": rent,
+        "annual_value": value,
+        "employee_rent": contribution,
+        "basic_value": basic_value
+    }
+
+# Calculate accommodation value including the additional property cost charge
+def housing_extra(annual_rent, annual_value, property_cost, interest_rate,
+                  employee_rent=0):
+
+    basic = housing_value(annual_rent, annual_value, employee_rent)
+
+    try:
+        cost = Decimal(str(property_cost))
+        rate = Decimal(str(interest_rate))
+    except (InvalidOperation, ValueError, TypeError):
+        raise ValueError("Invalid accommodation cost or interest rate.")
+
+    if not cost.is_finite() or not rate.is_finite():
+        raise ValueError("Accommodation values must be finite.")
+
+    if cost < 0 or rate < 0 or rate > 1:
+        raise ValueError("Invalid property cost or interest rate.")
+
+    excess_cost = max(cost - Decimal("75000"), Decimal("0"))
+
+    unused_rent = max(
+        basic["employee_rent"]
+        - max(basic["annual_rent"], basic["annual_value"]),
+        Decimal("0")
+    )
+
+    additional = max(
+        excess_cost * rate - unused_rent,
+        Decimal("0")
+    )
+
+    return {
+        "basic_value": basic["basic_value"],
+        "additional_value": additional,
+        "taxable_value": basic["basic_value"] + additional
+    }
+
 # Calculate taxable housing benefit after eligible relief
 def housing_tax(gross_value, relief=0):
     try:
@@ -97,6 +160,133 @@ def housing_tax(gross_value, relief=0):
         "gross": gross,
         "relief": deduction,
         "taxable": gross - deduction
+    }
+
+# Calculate accommodation expenditure, benefit value and taxable amount
+def housing_assessment(monthly_rent, annual_value, property_cost,
+                       interest_rate, employee_rent=0, relief=0,
+                       employer_recovery=0, relief_verified=False,
+                       assignment=None):
+
+    expenditure = housing_cost(monthly_rent)
+    
+    try:
+        recovery = Decimal(str(employer_recovery))
+    except (InvalidOperation, ValueError, TypeError):
+        raise ValueError("Invalid employer recovery amount.")
+
+    if not recovery.is_finite() or recovery < 0:
+        raise ValueError("Employer recovery must be finite and non-negative.")
+
+    if recovery > expenditure:
+        raise ValueError("Employer recovery cannot exceed housing expenditure.")
+
+    net_cost = expenditure - recovery
+
+
+    valuation = housing_extra(
+        expenditure,
+        annual_value,
+        property_cost,
+        interest_rate,
+        employee_rent
+    )
+        
+    if not isinstance(relief_verified, bool):
+        raise ValueError("Relief verification must be True or False.")
+
+    try:
+        relief_amount = Decimal(str(relief))
+    except (InvalidOperation, ValueError, TypeError):
+        raise ValueError("Invalid accommodation relief.")
+
+    eligibility = "not_assessed"
+
+    if relief_amount > 0 and assignment is None:
+        raise ValueError(
+            "Assignment details are required to assess accommodation relief."
+        )
+
+    if assignment is not None:
+        if not isinstance(assignment, dict):
+            raise ValueError("Invalid assignment details.")
+
+        employment = assignment.get("employment")
+        purpose = assignment.get("temporary_purpose")
+        months = assignment.get("expected_months")
+        additional = assignment.get("additional_cost")
+        reasonable = assignment.get("reasonable_cost")
+
+        try:
+            work = Decimal(str(assignment.get("work_percent", 100)))
+        except (InvalidOperation, ValueError, TypeError):
+            raise ValueError("Invalid working time percentage.")
+
+        if employment not in ("continuing", "new", "unknown"):
+            raise ValueError("Invalid employment arrangement.")
+
+        if any(
+            value is not None and not isinstance(value, bool)
+            for value in (purpose, additional, reasonable)
+        ):
+            raise ValueError("Invalid assignment condition.")
+
+        if months is not None and (
+            isinstance(months, bool)
+            or not isinstance(months, int)
+            or months <= 0
+        ):
+            raise ValueError("Invalid assignment duration.")
+
+        if not work.is_finite() or work < 0 or work > 100:
+            raise ValueError("Working time must be between 0 and 100.")
+
+        if (
+            purpose is False
+            or additional is False
+            or (months is not None and months > 24 and work >= 40)
+        ):
+            eligibility = "not_qualifying"
+
+        elif (
+            employment == "continuing"
+            and purpose is True
+            and months is not None
+            and months <= 24
+            and additional is True
+            and reasonable is True
+        ):
+            eligibility = "potentially_qualifying"
+
+        else:
+            eligibility = "requires_review"
+
+        if relief_amount > 0 and eligibility != "potentially_qualifying":
+            raise ValueError(
+                "Accommodation relief is not supported by the assignment conditions."
+            )
+
+    if relief_amount > 0 and not relief_verified:
+        raise ValueError(
+            "Accommodation tax relief requires verified eligibility."
+        )
+
+    tax = housing_tax(
+        valuation["taxable_value"],
+        relief
+    )
+
+    return {
+        "employer_cost": expenditure,
+        "employer_recovery": recovery,
+        "employer_net_cost": net_cost,
+        "basic_value": valuation["basic_value"],
+        "additional_value": valuation["additional_value"],
+        "relief_verified": relief_verified,
+        "eligibility": eligibility,
+        "gross_benefit": tax["gross"],
+        "relief": tax["relief"],
+        "taxable_benefit": tax["taxable"]
     }
 
 # Convert a cash relocation allowance into GBP

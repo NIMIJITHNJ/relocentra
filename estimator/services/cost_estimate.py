@@ -1,8 +1,8 @@
 from decimal import Decimal, InvalidOperation
 from .currency import convert_currency
-from .benefits import housing_cost, relocation_cash, relocation_relief, benefit_values, relocation_split, relocation_tax
+from .benefits import housing_cost, relocation_cash, relocation_relief, benefit_values, relocation_split, relocation_tax, housing_assessment
 from .gross_up import tax_grossup
-from .social_security import employer_social, employee_social, coverage_status, ni_scenario
+from .social_security import employer_social, employee_social, coverage_status, ni_scenario, uk_employee_ni
 
 # Calculate annual employer cost from individual financial components
 def year_cost(home_pay, benefits, host_tax, employer_charges, hypo_tax, hypo_social):
@@ -162,9 +162,15 @@ def host_tax(home, deductions, taxable):
     }
 
 # Convert basic Swiss employer social security charges into GBP
-def swiss_charges(income_chf, exchange_rate):
+def swiss_charges(income_chf, exchange_rate, additional_chf=0):
     contributions = employer_social(income_chf)
+    try:
+        additional = Decimal(str(0 if additional_chf is None else additional_chf))
+    except (InvalidOperation, ValueError, TypeError):
+        raise ValueError("Invalid additional Swiss employer costs.")
 
+    if not additional.is_finite() or additional < 0:
+        raise ValueError("Additional employer costs must be non-negative.")
     ahv = convert_currency(
         contributions["ahv"], "CHF", "GBP", exchange_rate
     )
@@ -173,17 +179,22 @@ def swiss_charges(income_chf, exchange_rate):
         contributions["alv"], "CHF", "GBP", exchange_rate
     )
 
+    other = convert_currency(
+        additional, "CHF", "GBP", exchange_rate
+    )
+
     return {
         "ahv": ahv,
         "alv": alv,
-        "total": ahv + alv
+        "other": other,
+        "total": ahv + alv + other
     }
 
 # Estimate annual employer cost using the existing calculation modules
 def estimate_year(year, salary, bonus, rate, swiss_tax,
                   monthly_rent, relocation, moving, temporary, taxable_kind,
                   moving_ok=False, temporary_ok=False,
-                  payment="employer_direct", certificate=False):
+                  payment="employer_direct", certificate=False, housing_data=None, additional_chf=0):
 
     coverage = coverage_status(certificate)
 
@@ -205,10 +216,33 @@ def estimate_year(year, salary, bonus, rate, swiss_tax,
         temporary_ok
     )
 
-    reporting = relocation_tax(relief, payment)
+    reporting = relocation_tax(relief, payment)    
     
+    housing = (
+        housing_assessment(monthly_rent, **housing_data)
+        if housing_data is not None
+        else None
+    )
+    
+    # Adjust employer expenditure for recovered housing payments
+    recovery = (
+        housing["employer_recovery"]
+        if housing is not None
+        else Decimal("0")
+    )
+
+    benefits["gross_total"] = benefits["total"]
+    benefits["housing_recovery"] = recovery
+    benefits["housing_net"] = benefits["housing"] - recovery
+    benefits["total"] -= recovery
+
+    kind_value = Decimal(str(taxable_kind))
+
+    if housing is not None:
+        kind_value += housing["taxable_benefit"]
+
     cash_total = benefits["relocation"] + reporting["taxable_cash"]
-    kind_total = Decimal(str(taxable_kind)) + reporting["taxable_kind"]
+    kind_total = kind_value + reporting["taxable_kind"]
 
     taxable = benefit_values(cash_total, kind_total)
 
@@ -217,7 +251,7 @@ def estimate_year(year, salary, bonus, rate, swiss_tax,
         pay["total"], deductions["total"], taxable["total_taxable"]
     )
 
-    charges = swiss_charges(income_chf, rate)
+    charges = swiss_charges(income_chf, rate, additional_chf)
 
     
     charges["coverage_confirmed"] = certificate
@@ -235,10 +269,22 @@ def estimate_year(year, salary, bonus, rate, swiss_tax,
         pay["total"]
         + benefits["relocation"]
         + reporting["uk_class1_base"]
+        + tax["employer_tax"]
     )
+        
+    # Calculate Class 1A accommodation base under the relief assumptions
+    ni_housing = Decimal("0")
+
+    if housing is not None:
+        ni_housing = (
+            Decimal("0")
+            if housing["relief"] == housing["gross_benefit"]
+            else housing["gross_benefit"]
+        )
 
     ni_benefits = (
         Decimal(str(taxable_kind))
+        + ni_housing
         + reporting["uk_class1a_base"]
     )
 
@@ -247,6 +293,12 @@ def estimate_year(year, salary, bonus, rate, swiss_tax,
         ni_benefits,
         Decimal("5000"),
         certificate=certificate
+    )    
+    
+    employee_ni = (
+        uk_employee_ni(ni_earnings)
+        if not certificate
+        else None
     )
 
     cost = year_cost(
@@ -257,6 +309,19 @@ def estimate_year(year, salary, bonus, rate, swiss_tax,
         deductions["hypo_tax"],
         deductions["hypo_social"]
     )
+    
+    # Calculate an alternative cost using UK employer NI
+    uk_cost = None
+
+    if uk_ni["illustrative"] is not None:
+        uk_cost = year_cost(
+            pay["total"],
+            benefits["total"],
+            tax["employer_tax"],
+            uk_ni["illustrative"]["total"],
+            deductions["hypo_tax"],
+            deductions["hypo_social"]
+        )
 
     return {
         "coverage": coverage,
@@ -265,29 +330,40 @@ def estimate_year(year, salary, bonus, rate, swiss_tax,
         "deductions": deductions,        
         "relief": relief,
         "reporting": reporting,
+        "housing": housing,
         "taxable": taxable,
         "tax": tax,
         "charges": charges,
         "uk_ni": uk_ni,
-        "cost": cost
+        "employee_ni": employee_ni,
+        "cost": cost,
+        "uk_cost": uk_cost
     }
 
 # Calculate the complete two-year assignment cost
 def estimate_assignment(salary, bonus, rate, swiss_tax, monthly_rent,
                         relocation, moving, temporary, taxable_kind1, taxable_kind2,
                         moving_ok=False, temporary_ok=False,
-                        payment="employer_direct", certificate=False):
+                        payment="employer_direct", certificate=False,
+                        housing_data1=None, housing_data2=None,
+                        additional_chf1=0, additional_chf2=0):
 
     year1 = estimate_year(
         1, salary, bonus, rate, swiss_tax,
         monthly_rent, relocation, moving, temporary, taxable_kind1,
-        moving_ok, temporary_ok, payment, certificate=certificate
+        moving_ok, temporary_ok, payment,
+        certificate=certificate,
+        housing_data=housing_data1,
+        additional_chf=additional_chf1
     )
 
     year2 = estimate_year(
         2, salary, bonus, rate, swiss_tax,
         monthly_rent, relocation, moving, temporary, taxable_kind2,
-        moving_ok, temporary_ok, payment, certificate=certificate
+        moving_ok, temporary_ok, payment,
+        certificate=certificate,
+        housing_data=housing_data2,
+        additional_chf=additional_chf2
     )
 
     summary = assignment_total(year1["cost"], year2["cost"])
@@ -302,10 +378,26 @@ def estimate_assignment(salary, bonus, rate, swiss_tax, monthly_rent,
         "Assignment costs are provisional until all applicable "
         "employer contributions and social security obligations are verified."
     )
+    
+    # Calculate the alternative two-year UK NI scenario
+    uk_summary = None
 
+    if year1["uk_cost"] is not None and year2["uk_cost"] is not None:
+        uk_summary = assignment_total(
+            year1["uk_cost"],
+            year2["uk_cost"]
+        )
+
+        uk_summary["provisional"] = True
+        uk_summary["note"] = (
+            "Illustrative alternative using UK employer NI instead of "
+            "Swiss employer contributions. Coverage and additional "
+            "employer liabilities require verification."
+        )
 
     return {
         "year1": year1,
         "year2": year2,
-        "summary": summary
+        "summary": summary,
+        "uk_summary": uk_summary
     }

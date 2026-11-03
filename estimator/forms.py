@@ -158,12 +158,21 @@ class AssignmentCostForm(forms.Form):
         initial=False,
         label="Temporary Accommodation Qualifies for Relocation Exemption"
     )
-
+    
     payment = forms.ChoiceField(
         choices=[
-            ("employer_direct", "Paid Directly by Employer"),
-            ("employee_direct", "Paid Directly to Employee"),
-            ("reimbursed", "Reimbursed to Employee")
+            (
+                "employer_direct",
+                "Employer Arranges and Pays Supplier"
+            ),
+            (
+                "employee_direct",
+                "Employee Arranges, Employer Pays Supplier"
+            ),
+            (
+                "reimbursed",
+                "Employee Pays, Employer Reimburses"
+            )
         ],
         initial="employer_direct",
         label="Relocation Expense Payment Method"
@@ -174,3 +183,164 @@ class AssignmentCostForm(forms.Form):
         initial=False,
         label="Valid Swiss Social Security Certificate Covers Both Years"
     )
+    
+    additional_chf1 = forms.DecimalField(
+        label="Year 1 Additional Swiss Employer Costs (CHF)",
+        min_value=0,
+        initial=0,
+        required=False,
+        max_digits=12,
+        decimal_places=2
+    )
+
+    additional_chf2 = forms.DecimalField(
+        label="Year 2 Additional Swiss Employer Costs (CHF)",
+        min_value=0,
+        initial=0,
+        required=False,
+        max_digits=12,
+        decimal_places=2
+    )
+
+class AccommodationAssessmentForm(forms.Form):
+
+    annual_value = forms.DecimalField(
+        min_value=Decimal("0"),
+        max_digits=18,
+        decimal_places=2,
+        label="HMRC Annual Accommodation Value (GBP)",
+        help_text="Use the applicable statutory annual value, not the property's market price."
+    )
+
+    property_cost = forms.DecimalField(
+        min_value=Decimal("0"),
+        max_digits=18,
+        decimal_places=2,
+        label="Qualifying Property Provision Cost (GBP)",
+        help_text="Relevant acquisition or lease-related cost, not annual rent or market value."
+    )
+
+    interest_rate = forms.DecimalField(
+        min_value=Decimal("0"),
+        max_value=Decimal("1"),
+        max_digits=10,
+        decimal_places=6,
+        label="Applicable Official Interest Rate",
+        help_text="Enter as a decimal, for example 0.0375 for 3.75%."
+    )
+
+    employee_rent = forms.DecimalField(
+        min_value=Decimal("0"),
+        max_digits=18,
+        decimal_places=2,
+        initial=0,
+        label="Annual Employee Rent Contribution (GBP)"
+    )
+
+    employer_recovery = forms.DecimalField(
+        min_value=Decimal("0"),
+        max_digits=18,
+        decimal_places=2,
+        initial=0,
+        label="Annual Housing Payment Recovered by Employer (GBP)"
+    )
+
+    relief = forms.DecimalField(
+        min_value=Decimal("0"),
+        max_digits=18,
+        decimal_places=2,
+        initial=0,
+        label="Assessed Accommodation Tax Relief (GBP)"
+    )
+
+    employment = forms.ChoiceField(
+        choices=[
+            ("unknown", "Not Confirmed"),
+            ("continuing", "Continuing Employment"),
+            ("new", "New Employment Arrangement")
+        ],
+        initial="unknown",
+        label="Employment Arrangement"
+    )
+
+    temporary_purpose = forms.ChoiceField(
+        choices=[
+            ("unknown", "Not Confirmed"),
+            ("yes", "Yes"),
+            ("no", "No")
+        ],
+        initial="unknown",
+        label="Temporary Workplace Purpose"
+    )
+
+    expected_months = forms.IntegerField(
+        min_value=1,
+        initial=24,
+        label="Expected UK Assignment Duration (Months)"
+    )
+
+    work_percent = forms.DecimalField(
+        min_value=Decimal("0"),
+        max_value=Decimal("100"),
+        max_digits=5,
+        decimal_places=2,
+        initial=100,
+        label="Percentage of Working Time at UK Workplace"
+    )
+
+    additional_cost = forms.ChoiceField(
+        choices=[
+            ("unknown", "Not Confirmed"),
+            ("yes", "Yes"),
+            ("no", "No")
+        ],
+        initial="unknown",
+        label="Accommodation Cost Attributable to Business Travel"
+    )
+
+    reasonable_cost = forms.ChoiceField(
+        choices=[
+            ("unknown", "Not Confirmed"),
+            ("yes", "Yes"),
+            ("no", "No")
+        ],
+        initial="unknown",
+        label="Accommodation Cost Confirmed as Reasonable"
+    )
+
+    relief_verified = forms.BooleanField(
+        required=False,
+        initial=False,
+        label="Relief Eligibility Supported by Evidence"
+    )
+    
+    # Prepare validated accommodation inputs for the calculation engine
+    def housing_data(self):
+        if not self.is_valid():
+            raise ValueError("Accommodation form contains invalid inputs.")
+
+        data = self.cleaned_data
+
+        choices = {
+            "yes": True,
+            "no": False,
+            "unknown": None
+        }
+
+        return {
+            "annual_value": data["annual_value"],
+            "property_cost": data["property_cost"],
+            "interest_rate": data["interest_rate"],
+            "employee_rent": data["employee_rent"],
+            "employer_recovery": data["employer_recovery"],
+            "relief": data["relief"],
+            "relief_verified": data["relief_verified"],
+            "assignment": {
+                "employment": data["employment"],
+                "temporary_purpose": choices[data["temporary_purpose"]],
+                "expected_months": data["expected_months"],
+                "work_percent": data["work_percent"],
+                "additional_cost": choices[data["additional_cost"]],
+                "reasonable_cost": choices[data["reasonable_cost"]]
+            }
+        }
