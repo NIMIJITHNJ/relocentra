@@ -4,7 +4,7 @@ from .services.eligibility import visa_checks
 from .services.fees import visa_fees
 from .services.documents import document_checks
 from .services.visitor import visitor_checks
-
+from .services.sponsorship import sponsor_checks
 
 class VisaEligibilityTests(SimpleTestCase):
 
@@ -776,3 +776,207 @@ class VisitorRequirementTests(SimpleTestCase):
             with self.subTest(values=values):
                 with self.assertRaises(ValueError):
                     self.visit(**values)
+
+class SponsorshipTests(SimpleTestCase):
+
+    # Create an employer with confirmed sponsorship requirements
+    def verified(self, **changes):
+        inputs = {
+            "licence_valid": True,
+            "route_authorised": True,
+            "rating": "A",
+            "continuing_same_route": False,
+            "link_type": "common_control",
+            "link_verified": True,
+            "linked_entity_recorded": True,
+            "genuine_job": True,
+            "lawful_job": True,
+            "cos_available": True,
+            "cos_assigned": True,
+            "cos_valid": True,
+            "isc_paid": True,
+            "isc_exempt": False,
+        }
+
+        inputs.update(changes)
+        return sponsor_checks(**inputs)
+
+    def test_default_assessment(self):
+        result = sponsor_checks()
+
+        self.assertEqual(
+            result["status"],
+            "verification_required"
+        )
+        self.assertEqual(len(result["checks"]), 10)
+        self.assertEqual(len(result["pending"]), 10)
+        self.assertEqual(result["actions"], [])
+
+    def test_complete_sponsorship(self):
+        result = self.verified()
+
+        self.assertEqual(
+            result["status"],
+            "sponsorship_requirements_met"
+        )
+        self.assertEqual(result["pending"], [])
+        self.assertEqual(result["actions"], [])
+        self.assertEqual(result["cos_type"], "undefined")
+
+        for item in result["checks"]:
+            self.assertEqual(item["status"], "met")
+
+    def test_licence_and_route(self):
+        cases = [
+            ({"licence_valid": False}, "licence"),
+            ({"route_authorised": False}, "route"),
+        ]
+
+        for changes, expected in cases:
+            with self.subTest(changes=changes):
+                result = self.verified(**changes)
+
+                self.assertIn(expected, result["actions"])
+                self.assertEqual(
+                    result["status"],
+                    "action_required"
+                )
+
+    def test_b_rated_sponsor(self):
+        continuing = self.verified(
+            rating="B",
+            continuing_same_route=True
+        )
+        new_assignment = self.verified(
+            rating="B",
+            continuing_same_route=False
+        )
+
+        self.assertEqual(
+            continuing["status"],
+            "sponsorship_requirements_met"
+        )
+        self.assertIn("rating", new_assignment["actions"])
+
+    def test_unacceptable_rating(self):
+        for rating in ("provisional", "none"):
+            with self.subTest(rating=rating):
+                result = self.verified(rating=rating)
+
+                self.assertIn("rating", result["actions"])
+
+    def test_corporate_relationship(self):
+        missing = self.verified(link_type="no_link")
+        unknown = self.verified(link_type="unknown")
+        unverified = self.verified(link_verified=None)
+        confirmed = self.verified(
+            link_type="joint_venture",
+            link_verified=True
+        )
+
+        self.assertIn("corporate_link", missing["actions"])
+        self.assertIn("corporate_link", unknown["pending"])
+        self.assertIn("corporate_link", unverified["pending"])
+        self.assertEqual(
+            confirmed["status"],
+            "sponsorship_requirements_met"
+        )
+
+    def test_cos_requirements(self):
+        no_allocation = self.verified(cos_available=False)
+        not_assigned = self.verified(
+            cos_assigned=False,
+            cos_valid=False
+        )
+        unverified = self.verified(cos_valid=None)
+
+        self.assertIn("allocation", no_allocation["actions"])
+        self.assertIn("certificate", not_assigned["actions"])
+        self.assertIn("certificate", unverified["pending"])
+
+    def test_isc_requirements(self):
+        unpaid = self.verified(isc_paid=False)
+        exempt = self.verified(
+            isc_paid=False,
+            isc_exempt=True
+        )
+
+        self.assertIn("isc", unpaid["actions"])
+        self.assertEqual(
+            exempt["status"],
+            "sponsorship_requirements_met"
+        )
+
+    def test_incomplete_information(self):
+        result = self.verified(
+            licence_valid=None,
+            linked_entity_recorded=None
+        )
+
+        self.assertEqual(
+            result["status"],
+            "verification_required"
+        )
+        self.assertIn("licence", result["pending"])
+        self.assertIn("linked_entity", result["pending"])
+
+    def test_multiple_failures(self):
+        result = self.verified(
+            licence_valid=False,
+            route_authorised=False,
+            genuine_job=False,
+            isc_paid=False
+        )
+
+        self.assertEqual(result["status"], "action_required")
+        self.assertEqual(len(result["actions"]), 4)
+
+    def test_employer_duties_and_sources(self):
+        result = self.verified()
+
+        self.assertEqual(len(result["duties"]), 6)
+        self.assertEqual(
+            result["cos_rules"]["apply_within_months"],
+            3
+        )
+        self.assertEqual(
+            result["cos_rules"]["earliest_application_months"],
+            3
+        )
+
+        for item in result["checks"] + result["duties"]:
+            self.assertTrue(item["source"].startswith("https://"))
+            self.assertTrue(item["title"])
+
+        self.assertTrue(result["notes"])
+
+    def test_invalid_inputs(self):
+        invalid = [
+            {"licence_valid": "yes"},
+            {"route_authorised": 1},
+            {"rating": "gold"},
+            {"continuing_same_route": None},
+            {"link_type": "ownership"},
+            {"link_verified": 0},
+            {"linked_entity_recorded": "yes"},
+            {"genuine_job": "true"},
+            {"cos_available": 1},
+            {"isc_paid": "paid"},
+            {"isc_exempt": "yes"},
+        ]
+
+        for values in invalid:
+            with self.subTest(values=values):
+                with self.assertRaises(ValueError):
+                    self.verified(**values)
+
+    def test_inconsistent_cos_inputs(self):
+        invalid = [
+            {"cos_assigned": False, "cos_valid": True},
+            {"cos_assigned": None, "cos_valid": True},
+        ]
+
+        for values in invalid:
+            with self.subTest(values=values):
+                with self.assertRaises(ValueError):
+                    self.verified(**values)
