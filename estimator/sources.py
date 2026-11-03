@@ -5,6 +5,16 @@ UK_INCOMETAX_SOURCE = {
     "url": "https://www.gov.uk/government/publications/rates-and-allowances-income-tax/income-tax-rates-and-allowances-current-and-past",
 }
 
+UK_EQUALISATION_SOURCE = {
+    "title": "HMRC - Tax Equalisation (HS212)",
+    "url": "https://www.gov.uk/government/publications/tax-equalisation-hs212-self-assessment-helpsheet",
+}
+
+UK_GROSSUP_SOURCE = {
+    "title": "HMRC - How to Gross Up (PAYE72028)",
+    "url": "https://www.gov.uk/hmrc-internal-manuals/paye-manual/paye72028",
+}
+
 SWISS_TAX_SOURCE = {
     "title": "Swiss Federal Tax Administration - Tax Calculator",
     "tax_year": "2026",
@@ -12,9 +22,9 @@ SWISS_TAX_SOURCE = {
 }
 
 SWISS_AHV_SOURCE = {
-    "title": "Swiss AHV/IV/EO Contributions",
+    "title": "Swiss AHV/IV/EO Contributions - Official Leaflets",
     "tax_year": "2026",
-    "url": "https://www.ahv-iv.ch/p/2.01.e",
+    "url": "https://www.ahv-iv.ch/en/Leaflets/Contributions-OASI-DI-IC",
 }
 
 SWISS_ALV_SOURCE = {
@@ -72,7 +82,9 @@ UK_NI_SOURCE = {
 
 SOURCE_GROUPS = {
     "UK Income Tax": [
-        UK_INCOMETAX_SOURCE       
+        UK_INCOMETAX_SOURCE,
+        UK_EQUALISATION_SOURCE,
+        UK_GROSSUP_SOURCE,       
     ],
 
     "Swiss Tax and Social Security": [
@@ -103,10 +115,14 @@ SOURCE_GROUPS = {
 SECTION_SOURCES = {
     "year1_tax": [
         UK_INCOMETAX_SOURCE,
+        UK_EQUALISATION_SOURCE,
+        UK_GROSSUP_SOURCE,
     ],
 
     "year2_tax": [
         UK_INCOMETAX_SOURCE,
+        UK_EQUALISATION_SOURCE,
+        UK_GROSSUP_SOURCE,
     ],
 
     "swiss_tax": [

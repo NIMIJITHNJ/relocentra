@@ -88,7 +88,7 @@ to run locally.
 Run these commands in the project terminal:
 
 ```powershell
-$env:DJANGO_SECRET_KEY = python -c "import secrets; print(secrets.token_urlsafe(50))"
+$env:DJANGO_SECRET_KEY = (python -c "import secrets; print(secrets.token_urlsafe(50))")
 $env:DJANGO_DEBUG = "True"
 ```
 
@@ -154,7 +154,7 @@ Run the immigration tests:
 
 `python manage.py test immigration`
 
-At the latest development checkpoint, the project contained 217 passing automated tests.
+At the latest development checkpoint, the project contained 219 passing automated tests.
 
 ## Assessment Scenario
 

@@ -116,6 +116,8 @@ def sponsor_checks(
     else:
         cos_met = cos_valid
 
+    allocation_met = True if cos_met is True else cos_available
+
     # Apply a confirmed ISC exemption where applicable
     isc_met = True if isc_exempt else isc_paid
 
@@ -149,8 +151,8 @@ def sponsor_checks(
             lawful_job, GBM_SOURCE,
         ),
         (
-            "allocation", "Available Undefined CoS allocation",
-            cos_available, COS_SOURCE,
+            "allocation", "CoS allocation available or already assigned",
+            allocation_met, COS_SOURCE,
         ),
         (
             "certificate", "Valid assigned Certificate of Sponsorship",

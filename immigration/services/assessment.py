@@ -98,7 +98,9 @@ def assess_immigration(data):
         employer_pays_ihs=data["employer_pays_ihs"],
         employer_pays_priority=data["employer_pays_priority"],
         employer_pays_eta=data["employer_pays_eta"],
-        maintenance_certified=data["sponsor_maintenance"],
+        maintenance_certified=(
+            data["sponsor_maintenance"] or (data["location"] == "inside" and data["uk_months"] >= 12)
+        ),
         licence_priority=data["licence_priority"],
         cos_priority=data["cos_priority"],
         extra_cos_needed=data["extra_cos_needed"],
@@ -107,6 +109,7 @@ def assess_immigration(data):
     documents = document_checks(
         eligible_salary_gbp=eligibility["general_salary"],
         uk_months=data["uk_months"],
+        location=data["location"],
         sponsor_maintenance=data["sponsor_maintenance"],
         tb_required=confirmed(data["tb_required"]),
         atas_required=confirmed(data["atas_required"]),

@@ -66,6 +66,12 @@ def visitor_checks(
         raise ValueError("Invalid ETA status.")
 
     warnings = []
+    warnings.append(
+        "Permitted business activities must comply with UK visitor "
+        "conditions. The visitor must not undertake ordinary employment "
+        "or provide services to the UK subsidiary unless specifically "
+        "allowed under the Immigration Rules."
+    )
 
     if not passport_valid:
         status = "passport_invalid"

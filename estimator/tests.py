@@ -2684,7 +2684,7 @@ class AssignmentViewTests(SimpleTestCase):
         self.assertEqual(len(groups), 5)
 
         expected = {
-            "UK Income Tax": 1,
+            "UK Income Tax": 3,
             "Swiss Tax and Social Security": 3,
             "UK National Insurance and Coverage": 2,
             "Accommodation and Secondment": 3,
@@ -2699,7 +2699,7 @@ class AssignmentViewTests(SimpleTestCase):
 
         self.assertEqual(
             sum(len(sources) for sources in groups.values()),
-            13
+            15
         )
 
         for sources in SOURCE_GROUPS.values():
@@ -2749,8 +2749,8 @@ class AssignmentViewTests(SimpleTestCase):
                 url = source["url"]
                 counts[url] = counts.get(url, 0) + 1
 
-        self.assertEqual(len(counts), 13)
-        self.assertEqual(sum(counts.values()), 28)
+        self.assertEqual(len(counts), 15)
+        self.assertEqual(sum(counts.values()), 34)
 
         for url, count in counts.items():
             with self.subTest(url=url):

@@ -382,7 +382,34 @@
             {% if result.eligibility.failed %}
             <div class="warning">
                 <strong>Requirements not met:</strong>
-                {{ result.eligibility.failed|join:", " }}
+                {% for item in result.eligibility.failed %}
+                    {% if item == "salary" %}
+                        Minimum salary requirement
+                    {% elif item == "employment" %}
+                        Overseas employment requirement
+                    {% elif item == "occupation" %}
+                        Occupation eligibility
+                    {% elif item == "going_rate" %}
+                        Occupation going rate
+                    {% elif item == "sponsor" %}
+                        Sponsor licence
+                    {% elif item == "sponsor_rating" %}
+                        Sponsor rating
+                    {% elif item == "certificate" %}
+                        Certificate of Sponsorship
+                    {% elif item == "corporate_link" %}
+                        Corporate relationship
+                    {% elif item == "current_employee" %}
+                        Existing employment relationship
+                    {% elif item == "genuine_job" %}
+                        Genuine job requirement
+                    {% elif item == "skills_charge" %}
+                        Immigration Skills Charge
+                    {% else %}
+                        {{ item }}
+                    {% endif %}
+                    {% if not forloop.last %}, {% endif %}
+                {% endfor %}
             </div>
             {% endif %}
 
@@ -390,7 +417,13 @@
             <div class="notice">
                 <strong>Verification required:</strong>                
                     {% for item in result.eligibility.pending %}
-                        {% if item == "occupation" %}
+                        {% if item == "salary" %}
+                            Minimum salary requirement
+                        {% elif item == "employment" %}
+                            Overseas employment requirement
+                        {% elif item == "current_employee" %}
+                            Existing employment relationship
+                        {% elif item == "occupation" %}
                             Occupation eligibility
                         {% elif item == "sponsor" %}
                             Sponsor licence
@@ -415,10 +448,14 @@
             {% endif %}
 
             <p class="source">
-                Source:
+                Official sources:
                 <a href="https://www.gov.uk/senior-specialist-worker-visa/eligibility"
-                   target="_blank" rel="noopener noreferrer">
-                    Gov.uk - Visa Eligibility
+                target="_blank" rel="noopener noreferrer">
+                    Visa Eligibility
+                </a> |
+                <a href="https://www.gov.uk/government/publications/sponsor-a-global-business-mobility-worker/workers-and-temporary-workers-sponsor-a-global-business-mobility-worker-accessible"
+                target="_blank" rel="noopener noreferrer">
+                    Salary and Allowance Rules
                 </a>
             </p>
         </section>
@@ -538,7 +575,7 @@
                             <td>£{{ result.fees.eta|floatformat:2 }}</td>
                         </tr>
                         <tr class="total">
-                            <td>Total Estimated Immigration Fees</td>
+                            <td>Total Estimated Immigration Fees (Main Applicant Only)</td>
                             <td>£{{ result.fees.overall_total|floatformat:2 }}</td>
                         </tr>
                         <tr>
@@ -559,6 +596,9 @@
             </p>
             <p class="muted">
                 Maintenance funds are not an application fee.
+                Visa application fees and IHS cover the main applicant only.
+                Additional visa fees, IHS and maintenance requirements
+                for dependants are excluded from this estimate.
                 IHS is calculated from the estimated visa permission
                 duration. Final costs depend on actual permission dates,
                 sponsorship circumstances and available services.
@@ -573,7 +613,11 @@
                 <a href="https://www.gov.uk/uk-visa-sponsorship-employers/certificates-of-sponsorship"
                    target="_blank" rel="noopener noreferrer">CoS</a> |
                 <a href="https://www.gov.uk/uk-visa-sponsorship-employers/types-of-licence"
-                   target="_blank" rel="noopener noreferrer">Sponsor Licence</a>
+                    target="_blank" rel="noopener noreferrer">Sponsor Licence</a> |
+                <a href="https://www.gov.uk/faster-decision-visa-settlement"
+                    target="_blank" rel="noopener noreferrer">Visa Priority Services</a> |
+                <a href="https://www.gov.uk/government/publications/visa-regulations-revised-table/home-office-immigration-and-nationality-fees-8-october-2026"
+                    target="_blank" rel="noopener noreferrer">Official Sponsorship and Priority Fees</a>
             </p>
         </section>
 

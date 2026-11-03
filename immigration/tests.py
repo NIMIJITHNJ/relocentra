@@ -566,7 +566,7 @@ class DocumentRequirementTests(SimpleTestCase):
         self.assertNotIn("funds", result["required"])
 
     def test_existing_uk_residence(self):
-        result = self.checklist(uk_months=12)
+        result = self.checklist(uk_months=12, location="inside")
 
         self.assertEqual(
             result["maintenance_amount"],
@@ -939,7 +939,12 @@ class SponsorshipTests(SimpleTestCase):
         )
 
     def test_cos_requirements(self):
-        no_allocation = self.verified(cos_available=False)
+        no_allocation = self.verified(
+            cos_available=False,
+            cos_assigned=False,
+            cos_valid=False
+        )
+        already_assigned = self.verified(cos_available=False)
         not_assigned = self.verified(
             cos_assigned=False,
             cos_valid=False
@@ -947,6 +952,11 @@ class SponsorshipTests(SimpleTestCase):
         unverified = self.verified(cos_valid=None)
 
         self.assertIn("allocation", no_allocation["actions"])
+        self.assertNotIn("allocation", already_assigned["actions"])
+        self.assertEqual(
+            already_assigned["status"],
+            "sponsorship_requirements_met"
+        )
         self.assertIn("certificate", not_assigned["actions"])
         self.assertIn("certificate", unverified["pending"])
 
@@ -1405,7 +1415,44 @@ class ImmigrationAssessmentTests(SimpleTestCase):
             result["fees"]["maintenance_evidence"],
             Decimal("0")
         )
+    def test_uk_residence_maintenance(self):
+        inside = self.assess(
+            location="inside",
+            uk_months=12,
+            sponsor_maintenance=False
+        )
 
+        self.assertEqual(
+            inside["documents"]["maintenance_amount"],
+            Decimal("0")
+        )
+        self.assertEqual(
+            inside["fees"]["maintenance_evidence"],
+            Decimal("0")
+        )
+        self.assertNotIn(
+            "funds",
+            inside["documents"]["required"]
+        )
+
+        outside = self.assess(
+            location="outside",
+            uk_months=12,
+            sponsor_maintenance=False
+        )
+
+        self.assertEqual(
+            outside["documents"]["maintenance_amount"],
+            Decimal("1270")
+        )
+        self.assertEqual(
+            outside["fees"]["maintenance_evidence"],
+            Decimal("1270")
+        )
+        self.assertIn(
+            "funds",
+            outside["documents"]["required"]
+        )
     def test_employer_funded_fees(self):
         result = self.assess(
             employer_pays_visa=True,
@@ -1481,6 +1528,19 @@ class ImmigrationViewTests(SimpleTestCase):
         self.assertContains(response, "Visitor visa not required")
         self.assertNotContains(response, "Visitoractivitypermitted")
         self.assertNotContains(response, "Verificationrequired")
+
+    def test_failed_eligibility_labels(self):
+        response = self.client.post(
+            "/immigration/",
+            self.input_data(current_employee="no")
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Requirements not met:")
+        self.assertContains(
+            response,
+            "Existing employment relationship"
+        )
 
     def test_documents_and_timeline(self):
         response = self.client.post(

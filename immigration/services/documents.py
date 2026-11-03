@@ -27,6 +27,7 @@ def check_number(value, name):
 def document_checks(
     eligible_salary_gbp,
     uk_months=0,
+    location="outside",
     sponsor_maintenance=False,
     tb_required=None,
     atas_required=None,
@@ -98,7 +99,9 @@ def document_checks(
         DOC_SOURCE
     )
 
-    funds_required = residence < 12 and not sponsor_maintenance
+    funds_required = not sponsor_maintenance and not (
+        location == "inside" and residence >= 12
+    )
 
     add(
         "funds",
