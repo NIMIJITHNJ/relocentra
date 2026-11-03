@@ -2,6 +2,7 @@ from decimal import Decimal
 from django.test import SimpleTestCase
 from .services.eligibility import visa_checks
 from .services.fees import visa_fees
+from .services.documents import document_checks
 
 
 class VisaEligibilityTests(SimpleTestCase):
@@ -474,3 +475,141 @@ class ImmigrationFeeTests(SimpleTestCase):
             with self.subTest(values=values):
                 with self.assertRaises(ValueError):
                     self.quote(**values)
+
+class DocumentRequirementTests(SimpleTestCase):
+
+    # Build the standard Swiss-to-UK assignment scenario
+    def checklist(self, **changes):
+        inputs = {
+            "eligible_salary_gbp": Decimal("136363.64"),
+            "uk_months": 0,
+        }
+        inputs.update(changes)
+        return document_checks(**inputs)
+
+    def test_assignment_documents(self):
+        result = self.checklist()
+
+        self.assertEqual(len(result["items"]), 12)
+        self.assertEqual(
+            result["maintenance_amount"],
+            Decimal("1270")
+        )
+
+        for code in ("passport", "cos", "employment", "sponsor", "funds"):
+            self.assertIn(code, result["required"])
+
+    def test_sponsor_maintenance(self):
+        result = self.checklist(sponsor_maintenance=True)
+
+        self.assertEqual(
+            result["maintenance_amount"],
+            Decimal("0")
+        )
+        self.assertNotIn("funds", result["required"])
+
+    def test_existing_uk_residence(self):
+        result = self.checklist(uk_months=12)
+
+        self.assertEqual(
+            result["maintenance_amount"],
+            Decimal("0")
+        )
+        self.assertNotIn("funds", result["required"])
+
+    def test_overseas_employment_evidence(self):
+        regular = self.checklist(eligible_salary_gbp=73900)
+        lower = self.checklist(eligible_salary_gbp=73899)
+
+        items_regular = {
+            item["code"]: item for item in regular["items"]
+        }
+        items_lower = {
+            item["code"]: item for item in lower["items"]
+        }
+
+        self.assertEqual(
+            items_regular["overseas"]["status"],
+            "not_required"
+        )
+        self.assertEqual(
+            items_lower["overseas"]["status"],
+            "may_be_requested"
+        )
+
+    def test_conditional_documents_required(self):
+        result = self.checklist(
+            tb_required=True,
+            atas_required=True,
+            translations_required=True,
+            scholarship_consent=True,
+            dependants=True
+        )
+
+        for code in (
+            "tb", "atas", "translations",
+            "scholarship", "dependants"
+        ):
+            self.assertIn(code, result["required"])
+
+    def test_conditional_documents_not_required(self):
+        result = self.checklist(
+            tb_required=False,
+            atas_required=False,
+            translations_required=False,
+            scholarship_consent=False,
+            dependants=False
+        )
+
+        for code in (
+            "tb", "atas", "translations",
+            "scholarship", "dependants"
+        ):
+            self.assertNotIn(code, result["required"])
+            self.assertNotIn(code, result["to_verify"])
+
+    def test_unverified_requirements(self):
+        result = self.checklist()
+
+        for code in (
+            "tb", "atas", "translations",
+            "scholarship", "identity"
+        ):
+            self.assertIn(code, result["to_verify"])
+
+    def test_document_sources(self):
+        result = self.checklist()
+
+        for item in result["items"]:
+            self.assertTrue(item["source"].startswith("https://"))
+            self.assertTrue(item["title"])
+            self.assertTrue(item["details"])
+
+    def test_unique_document_codes(self):
+        result = self.checklist()
+
+        codes = [item["code"] for item in result["items"]]
+        self.assertEqual(len(codes), len(set(codes)))
+
+    def test_invalid_inputs(self):
+        invalid = [
+            {"eligible_salary_gbp": -1},
+            {"eligible_salary_gbp": "NaN"},
+            {"eligible_salary_gbp": "Infinity"},
+            {"eligible_salary_gbp": "invalid"},
+            {"uk_months": -1},
+            {"uk_months": 2.5},
+            {"uk_months": "NaN"},
+            {"sponsor_maintenance": None},
+            {"sponsor_maintenance": "yes"},
+            {"tb_required": "yes"},
+            {"atas_required": 1},
+            {"dependants": None},
+            {"translations_required": "unknown"},
+            {"scholarship_consent": 1},
+        ]
+
+        for values in invalid:
+            with self.subTest(values=values):
+                with self.assertRaises(ValueError):
+                    self.checklist(**values)
