@@ -5,6 +5,7 @@ from .services.fees import visa_fees
 from .services.documents import document_checks
 from .services.visitor import visitor_checks
 from .services.sponsorship import sponsor_checks
+from .services.timeline import immigration_timeline
 
 class VisaEligibilityTests(SimpleTestCase):
 
@@ -1033,3 +1034,227 @@ class SponsorshipTests(SimpleTestCase):
             with self.subTest(values=values):
                 with self.assertRaises(ValueError):
                     self.verified(**values)
+
+class ImmigrationTimelineTests(SimpleTestCase):
+
+    # Build the standard immigration timeline
+    def timeline(self, **changes):
+        inputs = {
+            "licence_status": "existing",
+            "licence_priority": False,
+            "extra_cos_needed": False,
+            "cos_priority": False,
+            "location": "outside",
+            "priority": "none",
+            "eta_needed": False,
+        }
+
+        inputs.update(changes)
+        return immigration_timeline(**inputs)
+
+    def test_default_timeline(self):
+        result = self.timeline()
+
+        self.assertEqual(result["route"], "Senior or Specialist Worker")
+        self.assertEqual(len(result["work_stages"]), 2)
+        self.assertEqual(result["work_stages"][0]["code"], "certificate")
+        self.assertEqual(result["work_stages"][1]["code"], "visa")
+        self.assertEqual(
+            result["work_stages"][1]["time"],
+            "Usually within 3 weeks"
+        )
+        self.assertEqual(result["visitor_stages"], [])
+        self.assertIsNone(result["total_time"])
+
+    def test_new_sponsor_licence(self):
+        result = self.timeline(licence_status="new")
+
+        self.assertEqual(len(result["work_stages"]), 3)
+        self.assertEqual(result["work_stages"][0]["code"], "licence")
+        self.assertIn(
+            "8 weeks",
+            result["work_stages"][0]["time"]
+        )
+
+    def test_priority_licence(self):
+        result = self.timeline(
+            licence_status="new",
+            licence_priority=True
+        )
+
+        self.assertEqual(
+            result["work_stages"][0]["time"],
+            "Within 10 working days"
+        )
+
+    def test_route_addition(self):
+        result = self.timeline(licence_status="add_worker")
+
+        self.assertEqual(result["work_stages"][0]["code"], "licence")
+        self.assertEqual(
+            result["work_stages"][0]["time"],
+            "Processing time requires verification"
+        )
+
+    def test_cos_allocation(self):
+        result = self.timeline(extra_cos_needed=True)
+
+        codes = [item["code"] for item in result["work_stages"]]
+
+        self.assertEqual(
+            codes,
+            ["allocation", "certificate", "visa"]
+        )
+        self.assertEqual(
+            result["work_stages"][0]["time"],
+            "Usually within 12 weeks"
+        )
+
+    def test_priority_cos(self):
+        result = self.timeline(
+            extra_cos_needed=True,
+            cos_priority=True
+        )
+
+        self.assertEqual(
+            result["work_stages"][0]["time"],
+            "Within 5 working days"
+        )
+
+    def test_application_location(self):
+        outside = self.timeline(location="outside")
+        inside = self.timeline(location="inside")
+
+        self.assertEqual(
+            outside["work_stages"][-1]["time"],
+            "Usually within 3 weeks"
+        )
+        self.assertEqual(
+            inside["work_stages"][-1]["time"],
+            "Usually within 8 weeks"
+        )
+
+    def test_visa_priority(self):
+        priority = self.timeline(priority="priority")
+        super_priority = self.timeline(priority="super")
+
+        self.assertEqual(
+            priority["work_stages"][-1]["time"],
+            "Usually within 5 working days"
+        )
+        self.assertEqual(
+            super_priority["work_stages"][-1]["time"],
+            "Usually by the next working day"
+        )
+
+    def test_eta_separate(self):
+        result = self.timeline(eta_needed=True)
+
+        self.assertEqual(len(result["work_stages"]), 2)
+        self.assertEqual(len(result["visitor_stages"]), 1)
+        self.assertEqual(
+            result["visitor_stages"][0]["code"],
+            "eta"
+        )
+        self.assertIn(
+            "3 working days",
+            result["visitor_stages"][0]["time"]
+        )
+
+    def test_application_rules(self):
+        result = self.timeline()
+
+        self.assertEqual(
+            result["application_rules"]["cos_valid_months"],
+            3
+        )
+        self.assertEqual(
+            result["application_rules"]["earliest_apply_months"],
+            3
+        )
+        self.assertIsNone(result["total_time"])
+
+    def test_sources_and_notes(self):
+        result = self.timeline(
+            licence_status="new",
+            extra_cos_needed=True,
+            eta_needed=True
+        )
+
+        stages = (
+            result["work_stages"] +
+            result["visitor_stages"]
+        )
+
+        for stage in stages:
+            self.assertTrue(stage["source"].startswith("https://"))
+            self.assertTrue(stage["title"])
+            self.assertTrue(stage["time"])
+            self.assertTrue(stage["note"])
+
+        self.assertTrue(result["notes"])
+        self.assertTrue(result["total_status"])
+
+    def test_invalid_inputs(self):
+        invalid = [
+            {"licence_status": "invalid"},
+            {"licence_status": None},
+            {"location": "unknown"},
+            {"location": None},
+            {"priority": "fast"},
+            {"priority": None},
+            {"licence_priority": "yes"},
+            {"licence_priority": None},
+            {"extra_cos_needed": 1},
+            {"extra_cos_needed": None},
+            {"cos_priority": "true"},
+            {"cos_priority": None},
+            {"eta_needed": 1},
+            {"eta_needed": None},
+        ]
+
+        for values in invalid:
+            with self.subTest(values=values):
+                with self.assertRaises(ValueError):
+                    self.timeline(**values)
+
+    def test_inconsistent_options(self):
+        invalid = [
+            {"licence_priority": True},
+            {"licence_status": "add_worker", "licence_priority": True},
+            {"cos_priority": True},
+        ]
+
+        for values in invalid:
+            with self.subTest(values=values):
+                with self.assertRaises(ValueError):
+                    self.timeline(**values)
+
+    def test_priority_fee_consistency(self):
+        timeline = self.timeline(
+            licence_status="new",
+            licence_priority=True,
+            extra_cos_needed=True,
+            cos_priority=True
+        )
+
+        fees = visa_fees(
+            assignment_months=24,
+            permission_months=Decimal("24.5"),
+            licence_status="new",
+            licence_priority=True,
+            extra_cos_needed=True,
+            cos_priority=True
+        )
+
+        self.assertEqual(
+            timeline["work_stages"][0]["time"],
+            "Within 10 working days"
+        )
+        self.assertEqual(
+            timeline["work_stages"][1]["time"],
+            "Within 5 working days"
+        )
+        self.assertEqual(fees["licence_priority"], Decimal("750"))
+        self.assertEqual(fees["cos_priority"], Decimal("350"))
+        self.assertEqual(fees["optional_fees"], Decimal("1100"))
