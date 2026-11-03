@@ -1,39 +1,807 @@
-
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Immigration Assessment | Relocentra</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f7fb;
+            color: #263348;
+            margin: 0;
+            padding: 24px 16px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1050px;
+            margin: auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 28px;
+            margin-bottom: 24px;
+            box-shadow: 0 3px 14px rgba(0, 0, 0, 0.06);
+        }
+
+        h1, h2, h3 {
+            color: #17345c;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+        }
+
+        .subtitle, .muted {
+            color: #64748b;
+        }
+
+        .nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 24px 0;
+        }
+
+        .nav a {
+            padding: 10px 18px;
+            border-radius: 6px;
+            color: #173e73;
+            background: #e8eef6;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .nav a.active {
+            background: #173e73;
+            color: white;
+        }
+
+        details {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            margin: 14px 0;
+            padding: 16px;
+        }
+
+        summary {
+            cursor: pointer;
+            color: #17345c;
+            font-weight: 600;
+            font-size: 17px;
+        }
+
+        .fields {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px 24px;
+            margin-top: 20px;
+        }
+
+        .fields > div {
+            min-width: 0;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        input:not([type="checkbox"]), select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: white;
+            color: #263348;
+        }
+
+        input[type="checkbox"] {
+            width: auto;
+            margin-right: 8px;
+        }
+
+        .helptext {
+            display: block;
+            font-size: 13px;
+            color: #64748b;
+            margin-top: 5px;
+        }
+
+        .errorlist {
+            color: #b42318;
+            padding-left: 20px;
+        }
+
+        button {
+            background: #173e73;
+            color: white;
+            border: 0;
+            border-radius: 6px;
+            padding: 13px 24px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 14px;
+        }
+
+        button:hover {
+            background: #102f59;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 14px;
+        }
+
+        th, td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            background: #f1f5f9;
+        }
+
+        .total {
+            background: #edf3fa;
+            font-weight: bold;
+        }
+
+        .notice {
+            background: #f8fafc;
+            border-left: 4px solid #94a3b8;
+            padding: 14px;
+            margin: 16px 0;
+            border-radius: 4px;
+        }
+
+        .warning {
+            background: #fff9e8;
+            border-left: 4px solid #d69e29;
+            padding: 14px;
+            margin: 16px 0;
+            border-radius: 4px;
+        }
+
+        .status {
+            font-weight: 600;
+        }
+
+        .source {
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        a {
+            color: #1754a0;
+        }
+
+        ul {
+            padding-left: 22px;
+        }
+
+        @media (max-width: 700px) {
+            .fields {
+                grid-template-columns: 1fr;
+            }
+
+            .card {
+                padding: 18px;
+            }
+
+            body {
+                padding: 14px 10px;
+            }
+        }
+    </style>
 </head>
+
 <body>
-    <main>
+    <main class="container">
+
         <h1>Relocentra</h1>
-        <p>Switzerland to United Kingdom | Immigration Assessment</p>
+        <p class="subtitle">
+            Switzerland to United Kingdom | Relocation Assessment
+        </p>
 
-        <section>
-            <h2>Work Visa Assessment</h2>
+        <nav class="nav" aria-label="Main navigation">
+            <a href="{% url 'assignment' %}">Cost Estimator</a>
+            <a href="{% url 'immigration' %}" class="active"
+               aria-current="page">Immigration Assessment</a>
+        </nav>
+
+        <section class="card">
+            <h2>Immigration Assessment Inputs</h2>
+
+            <p class="subtitle">
+                Assess a Swiss employee transferring to a UK subsidiary
+                under the Global Business Mobility Senior or Specialist
+                Worker route. Unconfirmed conditions must be verified.
+            </p>
+
+            <form method="post">
+                {% csrf_token %}
+
+                {{ form.non_field_errors }}
+
+                <details open>
+                    <summary>1. Assignment and Job Details</summary>
+
+                    <div class="fields">
+                        <div>{{ form.salary_chf.as_field_group }}</div>
+                        <div>{{ form.rate.as_field_group }}</div>
+                        <div>{{ form.overseas_months.as_field_group }}</div>
+                        <div>{{ form.assignment_months.as_field_group }}</div>
+                        <div>{{ form.permission_months.as_field_group }}</div>
+                        <div>{{ form.weekly_hours.as_field_group }}</div>
+                        <div>{{ form.occupation_code.as_field_group }}</div>
+                        <div>{{ form.occupation_eligible.as_field_group }}</div>
+                        <div>{{ form.going_rate_gbp.as_field_group }}</div>
+                        <div>{{ form.going_rate_hours.as_field_group }}</div>
+                        <div>{{ form.allowed_allowance_chf.as_field_group }}</div>
+                        <div>{{ form.housing_allowance_chf.as_field_group }}</div>
+                        <div>{{ form.current_employee.as_field_group }}</div>
+                    </div>
+                </details>
+
+                <details>
+                    <summary>2. Employer Sponsorship</summary>
+
+                    <div class="fields">
+                        <div>{{ form.licence_status.as_field_group }}</div>
+                        <div>{{ form.sponsor_size.as_field_group }}</div>
+                        <div>{{ form.licence_valid.as_field_group }}</div>
+                        <div>{{ form.route_authorised.as_field_group }}</div>
+                        <div>{{ form.rating.as_field_group }}</div>
+                        <div>{{ form.continuing_same_route.as_field_group }}</div>
+                        <div>{{ form.link_type.as_field_group }}</div>
+                        <div>{{ form.link_verified.as_field_group }}</div>
+                        <div>{{ form.linked_entity_recorded.as_field_group }}</div>
+                        <div>{{ form.genuine_job.as_field_group }}</div>
+                        <div>{{ form.lawful_job.as_field_group }}</div>
+                        <div>{{ form.cos_available.as_field_group }}</div>
+                        <div>{{ form.cos_assigned.as_field_group }}</div>
+                        <div>{{ form.cos_valid.as_field_group }}</div>
+                        <div>{{ form.isc_paid.as_field_group }}</div>
+                        <div>{{ form.isc_exempt.as_field_group }}</div>
+                        <div>{{ form.extra_cos_needed.as_field_group }}</div>
+                    </div>
+                </details>
+
+                <details>
+                    <summary>3. Visa Fees and Payment Options</summary>
+
+                    <div class="fields">
+                        <div>{{ form.location.as_field_group }}</div>
+                        <div>{{ form.priority.as_field_group }}</div>
+                        <div>{{ form.licence_priority.as_field_group }}</div>
+                        <div>{{ form.cos_priority.as_field_group }}</div>
+                        <div>{{ form.employer_pays_visa.as_field_group }}</div>
+                        <div>{{ form.employer_pays_ihs.as_field_group }}</div>
+                        <div>{{ form.employer_pays_priority.as_field_group }}</div>
+                        <div>{{ form.employer_pays_eta.as_field_group }}</div>
+                    </div>
+                </details>
+
+                <details>
+                    <summary>4. Pre-Assignment Business Visit</summary>
+
+                    <div class="fields">
+                        <div>{{ form.plan_visit.as_field_group }}</div>
+                        <div>{{ form.purpose.as_field_group }}</div>
+                        <div>{{ form.visit_months.as_field_group }}</div>
+                        <div>{{ form.passport_valid.as_field_group }}</div>
+                        <div>{{ form.eta_exemption.as_field_group }}</div>
+                        <div>{{ form.has_valid_eta.as_field_group }}</div>
+                    </div>
+                </details>
+
+                <details>
+                    <summary>5. Supporting Documents</summary>
+
+                    <div class="fields">
+                        <div>{{ form.uk_months.as_field_group }}</div>
+                        <div>{{ form.sponsor_maintenance.as_field_group }}</div>
+                        <div>{{ form.tb_required.as_field_group }}</div>
+                        <div>{{ form.atas_required.as_field_group }}</div>
+                        <div>{{ form.translations_required.as_field_group }}</div>
+                        <div>{{ form.scholarship_consent.as_field_group }}</div>
+                        <div>{{ form.dependants.as_field_group }}</div>
+                    </div>
+                </details>
+
+                <button type="submit">Calculate Immigration Assessment</button>
+            </form>
         </section>
 
-        <section>
-            <h2>Pre-Assignment Business Visit</h2>
+        {% if result %}
+
+        <section class="card">
+            <h2>1. Work Visa Assessment</h2>
+
+            <p>
+                <strong>Recommended route:</strong>
+                Global Business Mobility – Senior or Specialist Worker
+            </p>
+
+            <p>
+                <strong>Assessment status:</strong>
+                <span class="status">
+                    {% if result.status == "core_requirements_met" %}
+                        Core requirements met — not a visa approval
+                    {% elif result.status == "requirements_not_met" %}
+                        One or more requirements not met
+                    {% elif result.status == "sponsorship_action_required" %}
+                        Employer sponsorship action required
+                    {% else %}
+                        Further verification required
+                    {% endif %}
+                </span>
+            </p>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Eligibility Component</th>
+                            <th>Result</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Annual Base Salary (GBP)</td>
+                            <td>£{{ result.eligibility.salary_gbp|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td>Qualifying Salary (GBP)</td>
+                            <td>£{{ result.eligibility.eligible_salary|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td>General Salary Threshold</td>
+                            <td>
+                                {% if result.eligibility.salary_met %}
+                                    Met
+                                {% else %}
+                                    Not met
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Overseas Employment Requirement</td>
+                            <td>
+                                {% if result.eligibility.employment_met %}
+                                    Met
+                                {% else %}
+                                    Not met
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Occupation Code</td>
+                            <td>
+                                {{ result.eligibility.occupation_code|default:"Not confirmed" }}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Occupation Going Rate</td>
+                            <td>
+                                {% if result.eligibility.going_rate_met == None %}
+                                    Not verified
+                                {% elif result.eligibility.going_rate_met %}
+                                    Met
+                                {% else %}
+                                    Not met
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            {% if result.eligibility.failed %}
+            <div class="warning">
+                <strong>Requirements not met:</strong>
+                {{ result.eligibility.failed|join:", " }}
+            </div>
+            {% endif %}
+
+            {% if result.eligibility.pending %}
+            <div class="notice">
+                <strong>Verification required:</strong>
+                {{ result.eligibility.pending|join:", " }}
+            </div>
+            {% endif %}
+
+            <p class="source">
+                Source:
+                <a href="https://www.gov.uk/senior-specialist-worker-visa/eligibility"
+                   target="_blank" rel="noopener noreferrer">
+                    GOV.UK — Visa Eligibility
+                </a>
+            </p>
         </section>
 
-        <section>
-            <h2>Passport and Supporting Documents</h2>
+        <section class="card">
+            <h2>2. Employer Sponsorship Requirements</h2>
+
+            <p>
+                <strong>Status:</strong>
+                {% if result.sponsorship.status == "verification_required" %}
+                    Verification required
+                {% elif result.sponsorship.status == "action_required" %}
+                    Action required
+                {% else %}
+                    Sponsorship requirements met
+                {% endif %}
+            </p>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Requirement</th>
+                            <th>Assessment</th>
+                            <th>Reference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in result.sponsorship.checks %}
+                        <tr>
+                            <td>{{ item.title }}</td>
+                            <td>
+                                {% if item.met == None %}
+                                    Verification required
+                                {% elif item.met %}
+                                    Met
+                                {% else %}
+                                    Action required
+                                {% endif %}
+                            </td>
+                            <td class="source">
+                                <a href="{{ item.source }}" target="_blank"
+                                   rel="noopener noreferrer">GOV.UK</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>Employer Responsibilities</h3>
+
+            <ul>
+                {% for duty in result.sponsorship.duties %}
+                <li>
+                    {{ duty.title }}
+                    <a class="source" href="{{ duty.source }}" target="_blank"
+                       rel="noopener noreferrer">Source</a>
+                </li>
+                {% endfor %}
+            </ul>
+
+            <p class="muted">
+                Certificate of Sponsorship type:
+                {{ result.sponsorship.cos_type|title }}.
+                Sponsor authorisation and corporate relationships
+                must be confirmed with supporting evidence.
+            </p>
         </section>
 
-        <section>
-            <h2>Employer Sponsorship Requirements</h2>
+        <section class="card">
+            <h2>3. Immigration Cost Estimate</h2>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Cost Component</th>
+                            <th>Amount (GBP)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Work Visa Application</td>
+                            <td>£{{ result.fees.visa|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td>Immigration Health Surcharge</td>
+                            <td>£{{ result.fees.ihs|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td>Certificate of Sponsorship</td>
+                            <td>£{{ result.fees.cos|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td>Immigration Skills Charge</td>
+                            <td>£{{ result.fees.isc|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td>Sponsor Licence</td>
+                            <td>£{{ result.fees.licence|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td>Visa Priority Service</td>
+                            <td>£{{ result.fees.priority|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td>Sponsor Licence Priority</td>
+                            <td>£{{ result.fees.licence_priority|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td>Additional CoS Allocation Priority</td>
+                            <td>£{{ result.fees.cos_priority|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td>Business Visit ETA</td>
+                            <td>£{{ result.fees.eta|floatformat:2 }}</td>
+                        </tr>
+                        <tr class="total">
+                            <td>Total Estimated Immigration Fees</td>
+                            <td>£{{ result.fees.overall_total|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td>Employer-Funded Total</td>
+                            <td>£{{ result.fees.employer_total|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td>Applicant-Funded Total</td>
+                            <td>£{{ result.fees.employee_total|floatformat:2 }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <p>
+                <strong>Financial maintenance evidence:</strong>
+                £{{ result.fees.maintenance_evidence|floatformat:2 }}
+            </p>
+            <p class="muted">
+                Maintenance funds are not an application fee.
+                IHS is calculated from the estimated visa permission
+                duration. Final costs depend on actual permission dates,
+                sponsorship circumstances and available services.
+            </p>
+
+            <p class="source">
+                Official sources:
+                <a href="https://www.gov.uk/senior-specialist-worker-visa/how-much-it-costs"
+                   target="_blank" rel="noopener noreferrer">Visa and IHS</a> |
+                <a href="https://www.gov.uk/uk-visa-sponsorship-employers/immigration-skills-charge"
+                   target="_blank" rel="noopener noreferrer">Immigration Skills Charge</a> |
+                <a href="https://www.gov.uk/uk-visa-sponsorship-employers/certificates-of-sponsorship"
+                   target="_blank" rel="noopener noreferrer">CoS</a> |
+                <a href="https://www.gov.uk/uk-visa-sponsorship-employers/types-of-licence"
+                   target="_blank" rel="noopener noreferrer">Sponsor Licence</a>
+            </p>
         </section>
 
-        <section>
-            <h2>Immigration Costs</h2>
+        <section class="card">
+            <h2>4. Pre-Assignment Business Visit</h2>
+
+            {% if result.visitor %}
+                <p>
+                    <strong>Visit assessment:</strong>
+                    {% if result.visitor.status == "visitor_activity_permitted" %}
+                        Visitor activity permitted
+                    {% elif result.visitor.status == "passport_invalid" %}
+                        Passport invalid
+                    {% elif result.visitor.status == "visit_too_long" %}
+                        Visit exceeds permitted duration
+                    {% elif result.visitor.status == "work_visa_required" %}
+                        Work visa required
+                    {% else %}
+                        Activity verification required
+                    {% endif %}
+                </p>
+
+                <p>
+                    <strong>Visitor visa assessment:</strong>
+                    {% if result.visitor.visa_status == "visitor_visa_not_required" %}
+                        Visitor visa not required
+                    {% elif result.visitor.visa_status == "work_visa_required" %}
+                        Work visa required
+                    {% elif result.visitor.visa_status == "requirements_not_met" %}
+                        Requirements not met
+                    {% else %}
+                        Verification required
+                    {% endif %}
+                </p>
+
+                <p>
+                    <strong>New ETA required:</strong>
+                    {% if result.visitor.eta_application_needed == None %}
+                        Requires verification
+                    {% elif result.visitor.eta_application_needed %}
+                        Yes
+                    {% else %}
+                        No
+                    {% endif %}
+                </p>
+
+                <p>
+                    <strong>ETA fee:</strong>
+                    £{{ result.visitor.eta_cost|floatformat:2 }}
+                </p>
+
+                <h3>Important Conditions</h3>
+
+                <ul>
+                    {% for warning in result.visitor.warnings %}
+                    <li>{{ warning }}</li>
+                    {% endfor %}
+                </ul>
+
+                <p class="source">
+                    Sources:
+                    <a href="{{ result.visitor.sources.business_activities }}"
+                       target="_blank" rel="noopener noreferrer">
+                        Permitted Business Activities
+                    </a> |
+                    <a href="{{ result.visitor.sources.eta }}"
+                       target="_blank" rel="noopener noreferrer">
+                        UK ETA
+                    </a> |
+                    <a href="{{ result.visitor.sources.eta_exemptions }}"
+                       target="_blank" rel="noopener noreferrer">
+                        ETA Exemptions
+                    </a>
+                </p>
+            {% else %}
+                <p>No pre-assignment business visit selected.</p>
+            {% endif %}
         </section>
 
-        <section>
-            <h2>Processing Timeline</h2>
+        <section class="card">
+            <h2>5. Passport and Supporting Documents</h2>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Document</th>
+                            <th>Requirement</th>
+                            <th>Reference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in result.documents.items %}
+                        <tr>
+                            <td>
+                                <strong>{{ item.title }}</strong>
+                                <p class="muted">{{ item.details }}</p>
+                            </td>
+                            <td>
+                                {% if item.status == "required" %}
+                                    Required
+                                {% elif item.status == "not_required" %}
+                                    Not required under selected assumptions
+                                {% elif item.status == "may_be_requested" %}
+                                    May be requested
+                                {% else %}
+                                    Verification required
+                                {% endif %}
+                            </td>
+                            <td class="source">
+                                <a href="{{ item.source }}" target="_blank"
+                                   rel="noopener noreferrer">GOV.UK</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <p class="muted">
+                This is a requirements checklist. It does not confirm
+                that the applicant has supplied the documents.
+            </p>
         </section>
+
+        <section class="card">
+            <h2>6. Immigration Processing Timeline</h2>
+
+            <h3>Work Visa and Sponsorship</h3>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Stage</th>
+                            <th>Expected Processing</th>
+                            <th>Reference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for stage in result.timeline.work_stages %}
+                        <tr>
+                            <td>
+                                <strong>{{ stage.title }}</strong>
+                                <p class="muted">{{ stage.note }}</p>
+                            </td>
+                            <td>{{ stage.time }}</td>
+                            <td class="source">
+                                <a href="{{ stage.source }}" target="_blank"
+                                   rel="noopener noreferrer">GOV.UK</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if result.timeline.visitor_stages %}
+            <h3>Separate Business Visit Timeline</h3>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Stage</th>
+                            <th>Expected Processing</th>
+                            <th>Reference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for stage in result.timeline.visitor_stages %}
+                        <tr>
+                            <td>{{ stage.title }}</td>
+                            <td>{{ stage.time }}</td>
+                            <td class="source">
+                                <a href="{{ stage.source }}" target="_blank"
+                                   rel="noopener noreferrer">GOV.UK</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
+            <div class="notice">
+                <strong>Overall timeline:</strong>
+                {{ result.timeline.total_status }}
+
+                <p>
+                    Individual processing times are estimates.
+                    Document preparation, sponsor authorisation,
+                    appointment availability and further Home Office
+                    checks may affect the actual duration.
+                </p>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Assessment Limitations</h2>
+
+            <div class="warning">
+                This assessment is an illustrative immigration estimate,
+                not immigration advice or confirmation of visa approval.
+                Eligibility depends on verified occupation, sponsorship,
+                salary and personal circumstances.
+                Government fees and processing times may change.
+            </div>
+        </section>
+
+        {% endif %}
+
     </main>
 </body>
 </html>

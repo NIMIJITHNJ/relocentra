@@ -1434,3 +1434,94 @@ class ImmigrationAssessmentTests(SimpleTestCase):
             with self.subTest(changes=changes):
                 form = ImmigrationForm(data=self.inputs(**changes))
                 self.assertFalse(form.is_valid())
+
+class ImmigrationViewTests(SimpleTestCase):
+
+    # Prepare the default immigration form inputs
+    def input_data(self, **changes):
+        data = {
+            name: field.initial
+            for name, field in ImmigrationForm.base_fields.items()
+            if field.initial is not None
+        }
+        data.update(changes)
+        return data
+
+    def test_page_loads(self):
+        response = self.client.get("/immigration/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Immigration Assessment Inputs")
+        self.assertContains(response, "Annual Base Salary")
+        self.assertContains(response, "Employer Sponsorship")
+        self.assertContains(response, "Cost Estimator")
+
+    def test_default_assessment(self):
+        response = self.client.post(
+            "/immigration/",
+            self.input_data()
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Work Visa Assessment")
+        self.assertContains(response, "£136363.64")
+        self.assertContains(response, "£6591.50")
+        self.assertContains(response, "£3165.00")
+        self.assertContains(response, "£3426.50")
+
+    def test_status_labels(self):
+        response = self.client.post(
+            "/immigration/",
+            self.input_data()
+        )
+
+        self.assertContains(response, "Further verification required")
+        self.assertContains(response, "Verification required")
+        self.assertContains(response, "Visitor activity permitted")
+        self.assertContains(response, "Visitor visa not required")
+        self.assertNotContains(response, "Visitoractivitypermitted")
+        self.assertNotContains(response, "Verificationrequired")
+
+    def test_documents_and_timeline(self):
+        response = self.client.post(
+            "/immigration/",
+            self.input_data()
+        )
+
+        self.assertContains(response, "Passport and Supporting Documents")
+        self.assertContains(response, "Financial maintenance evidence")
+        self.assertContains(response, "Immigration Processing Timeline")
+        self.assertContains(response, "Usually within 3 weeks")
+        self.assertContains(response, "gov.uk")
+
+    def test_invalid_submission(self):
+        response = self.client.post(
+            "/immigration/",
+            self.input_data(permission_months=12)
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Visa permission cannot be shorter than the assignment."
+        )
+        self.assertNotContains(
+            response,
+            "Total Estimated Immigration Fees"
+        )
+
+    def test_no_business_visit(self):
+        response = self.client.post(
+            "/immigration/",
+            self.input_data(plan_visit=False)
+        )
+
+        self.assertContains(
+            response,
+            "No pre-assignment business visit selected."
+        )
+        self.assertContains(response, "£6571.50")
+        self.assertNotContains(
+            response,
+            "Visitor activity permitted"
+        )
