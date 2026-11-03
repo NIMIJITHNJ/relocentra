@@ -3,6 +3,7 @@ from django.test import SimpleTestCase
 from .services.eligibility import visa_checks
 from .services.fees import visa_fees
 from .services.documents import document_checks
+from .services.visitor import visitor_checks
 
 
 class VisaEligibilityTests(SimpleTestCase):
@@ -613,3 +614,165 @@ class DocumentRequirementTests(SimpleTestCase):
             with self.subTest(values=values):
                 with self.assertRaises(ValueError):
                     self.checklist(**values)
+
+class VisitorRequirementTests(SimpleTestCase):
+
+    # Build the standard pre-assignment business visit
+    def visit(self, **changes):
+        inputs = {
+            "purpose": "meetings",
+            "visit_months": 1,
+            "passport_valid": True,
+            "eta_exemption": "none",
+            "has_valid_eta": False,
+        }
+        inputs.update(changes)
+        return visitor_checks(**inputs)
+
+    def test_standard_business_visit(self):
+        result = self.visit()
+
+        self.assertEqual(
+            result["status"],
+            "visitor_activity_permitted"
+        )
+        self.assertEqual(
+            result["visa_status"],
+            "visitor_visa_not_required"
+        )
+        self.assertTrue(result["eta_required"])
+        self.assertTrue(result["eta_application_needed"])
+        self.assertEqual(result["eta_cost"], Decimal("20"))
+
+    def test_permitted_activities(self):
+        activities = [
+            "meetings",
+            "conferences",
+            "negotiations",
+            "site_visit",
+        ]
+
+        for purpose in activities:
+            with self.subTest(purpose=purpose):
+                result = self.visit(purpose=purpose)
+                self.assertEqual(
+                    result["status"],
+                    "visitor_activity_permitted"
+                )
+
+    def test_existing_eta(self):
+        result = self.visit(has_valid_eta=True)
+
+        self.assertTrue(result["eta_required"])
+        self.assertFalse(result["eta_application_needed"])
+        self.assertEqual(result["eta_cost"], Decimal("0"))
+
+    def test_eta_exemptions(self):
+        exemptions = [
+            "uk_permission",
+            "british_irish",
+            "ireland_resident_cta",
+        ]
+
+        for exemption in exemptions:
+            with self.subTest(exemption=exemption):
+                result = self.visit(eta_exemption=exemption)
+
+                self.assertFalse(result["eta_required"])
+                self.assertFalse(result["eta_application_needed"])
+                self.assertEqual(result["eta_cost"], Decimal("0"))
+
+    def test_invalid_passport(self):
+        result = self.visit(passport_valid=False)
+
+        self.assertEqual(result["status"], "passport_invalid")
+        self.assertIsNone(result["eta_required"])
+        self.assertEqual(result["eta_cost"], Decimal("0"))
+
+    def test_visit_duration(self):
+        allowed = self.visit(visit_months=6)
+        excessive = self.visit(visit_months=Decimal("6.1"))
+
+        self.assertEqual(
+            allowed["status"],
+            "visitor_activity_permitted"
+        )
+        self.assertEqual(
+            excessive["status"],
+            "visit_too_long"
+        )
+        self.assertEqual(
+            excessive["visa_status"],
+            "requirements_not_met"
+        )
+
+    def test_uk_employment(self):
+        result = self.visit(purpose="uk_employment")
+
+        self.assertEqual(
+            result["status"],
+            "work_visa_required"
+        )
+        self.assertEqual(
+            result["visa_status"],
+            "work_visa_required"
+        )
+        self.assertIsNone(result["eta_application_needed"])
+
+    def test_activities_requiring_review(self):
+        for purpose in ("training", "other"):
+            with self.subTest(purpose=purpose):
+                result = self.visit(purpose=purpose)
+
+                self.assertEqual(
+                    result["status"],
+                    "activity_verification_required"
+                )
+                self.assertEqual(
+                    result["visa_status"],
+                    "verification_required"
+                )
+
+    def test_eta_information(self):
+        result = self.visit()
+
+        self.assertEqual(
+            result["eta_validity_months"],
+            Decimal("24")
+        )
+        self.assertEqual(
+            result["max_visit_months"],
+            Decimal("6")
+        )
+        self.assertIn("three working days", result["eta_processing"])
+
+    def test_sources_and_warnings(self):
+        result = self.visit()
+
+        for url in result["sources"].values():
+            self.assertTrue(url.startswith("https://"))
+
+        self.assertTrue(result["warnings"])
+        self.assertTrue(
+            any("work visa" in warning for warning in result["warnings"])
+        )
+
+    def test_invalid_inputs(self):
+        invalid = [
+            {"visit_months": 0},
+            {"visit_months": -1},
+            {"visit_months": "NaN"},
+            {"visit_months": "Infinity"},
+            {"visit_months": "invalid"},
+            {"purpose": "holiday_work"},
+            {"eta_exemption": "unknown"},
+            {"passport_valid": None},
+            {"passport_valid": "yes"},
+            {"has_valid_eta": 1},
+            {"has_valid_eta": None},
+        ]
+
+        for values in invalid:
+            with self.subTest(values=values):
+                with self.assertRaises(ValueError):
+                    self.visit(**values)
