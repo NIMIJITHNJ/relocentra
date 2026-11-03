@@ -1,39 +1,29 @@
+{% extends "core/base.html" %}
+{% block title %}Assignment Cost Estimator | Relocentra{% endblock %}
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Assignment Cost Estimator | Relocentra</title>
-
+{% block extra_head %}
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f5f7fb;
-            color: #263348;
-            margin: 0;
-            padding: 30px 16px;
-        }
 
         .container {
-            max-width: 900px;
+            max-width: 1000px;
             margin: auto;
         }
 
         .card {
-            background: white;
-            border-radius: 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
             padding: 28px;
             margin-bottom: 24px;
-            box-shadow: 0 3px 14px rgba(0, 0, 0, 0.06);
+            box-shadow: var(--shadow);
         }
 
         h1, h2 {
-            color: #17345c;
+            color: var(--primary);
         }
 
         .subtitle {
-            color: #64748b;
+            color: var(--muted);
         }
 
         form p {
@@ -70,17 +60,18 @@
         }
 
         button {
-            background: #173e73;
+            background: var(--primary);
             color: white;
             border: none;
-            border-radius: 6px;
+            border-radius: 10px;
             padding: 13px 24px;
             cursor: pointer;
             font-size: 15px;
+            font-weight: 700;
         }
 
         button:hover {
-            background: #102f59;
+            background: var(--primary-dark);
         }
 
         table {
@@ -110,24 +101,63 @@
             background: #fff9e8;
             margin-top: 20px;
         }
+
+        /* Two-column form layout, matching the immigration assessment */
+        .assignment-form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            column-gap: 24px;
+            row-gap: 18px;
+            margin-bottom: 28px;
+        }
+
+        .assignment-form-grid > p {
+            min-width: 0;
+            margin: 0;
+        }
+
+        .assignment-form-grid > .errorlist {
+            grid-column: 1 / -1;
+        }
+
+        .assignment-submit {
+            margin-top: 26px;
+        }
+
+        #housing_fields {
+            margin-top: 22px;
+            padding: 18px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+        }
+
+        @media (max-width: 760px) {
+            .assignment-form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
-</head>
+{% endblock %}
 
-<body>
-    <main class="container">
-
-        <h1>Relocentra</h1>
-        <p class="subtitle">
-            Switzerland to United Kingdom | Two-Year Assignment Cost Estimator
-        </p>
+{% block content %}
+    <div class="container">
+        <div class="page-intro">
+            <span class="eyebrow">Financial planning</span>
+            <h1 class="page-title">Assignment Cost Estimator</h1>
+            <p class="page-description">
+                Switzerland to United Kingdom | Two-Year Assignment Cost Estimator
+            </p>
+        </div>
 
         <section class="card">
             <h2>Assignment Details</h2>
 
-            <form method="post">
+            <form method="post" action="{% url 'assignment' %}#assignment-results">
                 {% csrf_token %}
 
-                {{ form.as_p }}
+                <div class="assignment-form-grid">
+                    {{ form.as_p }}
+                </div>
                 
                 <h3>Accommodation Calculation Method</h3>
 
@@ -152,11 +182,15 @@
                 <fieldset id="housing_fields" disabled hidden>
                     <h3>Year 1 - Accommodation Assessment</h3>
 
+                    <div class="assignment-form-grid">
                     {{ housing_form1.as_p }}
+                </div>
 
                     <h3>Year 2 - Accommodation Assessment</h3>
 
+                    <div class="assignment-form-grid">
                     {{ housing_form2.as_p }}
+                </div>
                 </fieldset>                
                 
                 <input type="hidden" name="manual_kind1" id="manual_kind1"
@@ -223,14 +257,15 @@
                     updateHousingFields();
                 </script>
 
-                <button type="submit">
+                <button class="assignment-submit" type="submit">
                     Calculate Assignment Cost
                 </button>
             </form>
         </section>
 
         {% if result %}
-        <section class="card">
+        <section class="card" id="assignment-results"
+                style="scroll-margin-top: 110px;">
             <h2>Assignment Cost Summary</h2>
 
             <table>
@@ -946,7 +981,7 @@
             
             <div class="source-links">
                 <p class="subtitle">
-                    <strong>Official References — UK Employer National Insurance</strong>
+                    <strong>Official References - UK Employer National Insurance</strong>
                 </p>
 
                 <ul>
@@ -1050,7 +1085,7 @@
             
             <div class="source-links">
                 <p class="subtitle">
-                    <strong>Official Reference — UK–Swiss Social Security Coverage</strong>
+                    <strong>Official Reference - UK–Swiss Social Security Coverage</strong>
                 </p>
 
                 <ul>
@@ -1123,6 +1158,5 @@
             {% endfor %}
         </section>
 
-    </main>
-</body>
-</html>
+    </div>
+{% endblock %}

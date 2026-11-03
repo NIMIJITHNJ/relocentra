@@ -1,232 +1,194 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends "core/base.html" %}
+{% block title %}Immigration Assessment | Relocentra{% endblock %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Immigration Assessment | Relocentra</title>
+{% block extra_head %}
+<style>
+    /* Immigration components aligned with the shared Relocentra design. */
+    .immigration-page {
+        max-width: 1000px;
+        margin: 0 auto;
+    }
 
-    <style>
-        * {
-            box-sizing: border-box;
+    .immigration-page .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 28px;
+        margin-bottom: 24px;
+        box-shadow: var(--shadow);
+    }
+
+    .immigration-page h2,
+    .immigration-page h3 {
+        color: var(--primary);
+    }
+
+    .immigration-page .subtitle,
+    .immigration-page .muted {
+        color: var(--muted);
+    }
+
+    .immigration-page details {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin: 14px 0;
+        padding: 18px;
+        background: var(--surface);
+    }
+
+    .immigration-page summary {
+        cursor: pointer;
+        color: var(--primary);
+        font-weight: 700;
+        font-size: 16px;
+    }
+
+    .immigration-page details[open] > summary {
+        margin-bottom: 4px;
+    }
+
+    .immigration-page .fields {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px 24px;
+        margin-top: 20px;
+    }
+
+    .immigration-page .fields > div {
+        min-width: 0;
+    }
+
+    .immigration-page label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 6px;
+    }
+
+    .immigration-page input:not([type="checkbox"]),
+    .immigration-page select {
+        width: 100%;
+        padding: 11px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: #fff;
+        color: var(--text);
+    }
+
+    .immigration-page input[type="checkbox"] {
+        width: auto;
+        margin-right: 8px;
+    }
+
+    .immigration-page .helptext {
+        display: block;
+        font-size: 13px;
+        color: var(--muted);
+        margin-top: 5px;
+    }
+
+    .immigration-page .errorlist {
+        color: #b42318;
+        padding-left: 20px;
+    }
+
+    .immigration-page button[type="submit"] {
+        background: var(--primary);
+        color: #fff;
+        border: 0;
+        border-radius: 10px;
+        padding: 13px 24px;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+        margin-top: 26px;
+    }
+
+    .immigration-page button[type="submit"]:hover {
+        background: var(--primary-dark);
+    }
+
+    .immigration-page .table-wrap {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .immigration-page table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 14px;
+    }
+
+    .immigration-page th,
+    .immigration-page td {
+        padding: 13px;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+        vertical-align: top;
+    }
+
+    .immigration-page th {
+        background: #f1f5f9;
+    }
+
+    .immigration-page .total {
+        background: #edf3fa;
+        font-weight: 700;
+    }
+
+    .immigration-page .notice {
+        background: #f8fafc;
+        border-left: 4px solid #94a3b8;
+        padding: 14px;
+        margin: 16px 0;
+        border-radius: 4px;
+    }
+
+    .immigration-page .warning {
+        background: #fff9e8;
+        border-left: 4px solid #d69e29;
+        padding: 14px;
+        margin: 16px 0;
+        border-radius: 4px;
+    }
+
+    .immigration-page .status {
+        font-weight: 700;
+    }
+
+    .immigration-page .source {
+        font-size: 13px;
+        white-space: nowrap;
+    }
+
+    .immigration-page ul {
+        padding-left: 22px;
+    }
+
+    @media (max-width: 760px) {
+        .immigration-page .fields {
+            grid-template-columns: 1fr;
         }
 
-        body {
-            font-family: Arial, sans-serif;
-            background: #f5f7fb;
-            color: #263348;
-            margin: 0;
-            padding: 24px 16px;
-            line-height: 1.6;
+        .immigration-page .card {
+            padding: 20px;
         }
 
-        .container {
-            max-width: 1050px;
-            margin: auto;
-        }
-
-        .card {
-            background: white;
-            border-radius: 12px;
-            padding: 28px;
-            margin-bottom: 24px;
-            box-shadow: 0 3px 14px rgba(0, 0, 0, 0.06);
-        }
-
-        h1, h2, h3 {
-            color: #17345c;
-        }
-
-        h1 {
-            margin-bottom: 5px;
-        }
-
-        .subtitle, .muted {
-            color: #64748b;
-        }
-
-        .nav {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin: 24px 0;
-        }
-
-        .nav a {
-            padding: 10px 18px;
-            border-radius: 6px;
-            color: #173e73;
-            background: #e8eef6;
-            text-decoration: none;
-            font-weight: 600;
-        }
-
-        .nav a.active {
-            background: #173e73;
-            color: white;
-        }
-
-        details {
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            margin: 14px 0;
-            padding: 16px;
-        }
-
-        summary {
-            cursor: pointer;
-            color: #17345c;
-            font-weight: 600;
-            font-size: 17px;
-        }
-
-        .fields {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 18px 24px;
-            margin-top: 20px;
-        }
-
-        .fields > div {
-            min-width: 0;
-        }
-
-        label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 6px;
-        }
-
-        input:not([type="checkbox"]), select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            background: white;
-            color: #263348;
-        }
-
-        input[type="checkbox"] {
-            width: auto;
-            margin-right: 8px;
-        }
-
-        .helptext {
-            display: block;
-            font-size: 13px;
-            color: #64748b;
-            margin-top: 5px;
-        }
-
-        .errorlist {
-            color: #b42318;
-            padding-left: 20px;
-        }
-
-        button {
-            background: #173e73;
-            color: white;
-            border: 0;
-            border-radius: 6px;
-            padding: 13px 24px;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            margin-top: 14px;
-        }
-
-        button:hover {
-            background: #102f59;
-        }
-
-        .table-wrap {
-            overflow-x: auto;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 14px;
-        }
-
-        th, td {
-            padding: 12px;
-            border-bottom: 1px solid #e2e8f0;
-            text-align: left;
-            vertical-align: top;
-        }
-
-        th {
-            background: #f1f5f9;
-        }
-
-        .total {
-            background: #edf3fa;
-            font-weight: bold;
-        }
-
-        .notice {
-            background: #f8fafc;
-            border-left: 4px solid #94a3b8;
+        .immigration-page details {
             padding: 14px;
-            margin: 16px 0;
-            border-radius: 4px;
         }
+    }
+</style>
+{% endblock %}
 
-        .warning {
-            background: #fff9e8;
-            border-left: 4px solid #d69e29;
-            padding: 14px;
-            margin: 16px 0;
-            border-radius: 4px;
-        }
-
-        .status {
-            font-weight: 600;
-        }
-
-        .source {
-            font-size: 13px;
-            white-space: nowrap;
-        }
-
-        a {
-            color: #1754a0;
-        }
-
-        ul {
-            padding-left: 22px;
-        }
-
-        @media (max-width: 700px) {
-            .fields {
-                grid-template-columns: 1fr;
-            }
-
-            .card {
-                padding: 18px;
-            }
-
-            body {
-                padding: 14px 10px;
-            }
-        }
-    </style>
-</head>
-
-<body>
-    <main class="container">
-
-        <h1>Relocentra</h1>
-        <p class="subtitle">
-            Switzerland to United Kingdom | Relocation Assessment
+{% block content %}
+<div class="immigration-page">
+    <div class="page-intro">
+        <span class="eyebrow">Immigration planning</span>
+        <h1 class="page-title">Immigration Assessment</h1>
+        <p class="page-description">
+            Switzerland to United Kingdom | Global Business Mobility - Senior or Specialist Worker
         </p>
-
-        <nav class="nav" aria-label="Main navigation">
-            <a href="{% url 'assignment' %}">Cost Estimator</a>
-            <a href="{% url 'immigration' %}" class="active"
-               aria-current="page">Immigration Assessment</a>
-        </nav>
+    </div>
 
         <section class="card">
             <h2>Immigration Assessment Inputs</h2>
@@ -237,7 +199,7 @@
                 Worker route. Unconfirmed conditions must be verified.
             </p>
 
-            <form method="post">
+            <form method="post" action="{% url 'immigration' %}#immigration-results">
                 {% csrf_token %}
 
                 {{ form.non_field_errors }}
@@ -334,19 +296,20 @@
 
         {% if result %}
 
-        <section class="card">
+        <section class="card" id="immigration-results"
+                style="scroll-margin-top: 110px;">
             <h2>1. Work Visa Assessment</h2>
 
             <p>
                 <strong>Recommended route:</strong>
-                Global Business Mobility – Senior or Specialist Worker
+                Global Business Mobility - Senior or Specialist Worker
             </p>
 
             <p>
                 <strong>Assessment status:</strong>
                 <span class="status">
                     {% if result.status == "core_requirements_met" %}
-                        Core requirements met — not a visa approval
+                        Core requirements met - not a visa approval
                     {% elif result.status == "requirements_not_met" %}
                         One or more requirements not met
                     {% elif result.status == "sponsorship_action_required" %}
@@ -425,8 +388,29 @@
 
             {% if result.eligibility.pending %}
             <div class="notice">
-                <strong>Verification required:</strong>
-                {{ result.eligibility.pending|join:", " }}
+                <strong>Verification required:</strong>                
+                    {% for item in result.eligibility.pending %}
+                        {% if item == "occupation" %}
+                            Occupation eligibility
+                        {% elif item == "sponsor" %}
+                            Sponsor licence
+                        {% elif item == "sponsor_rating" %}
+                            Sponsor rating
+                        {% elif item == "certificate" %}
+                            Certificate of Sponsorship
+                        {% elif item == "corporate_link" %}
+                            Corporate relationship
+                        {% elif item == "genuine_job" %}
+                            Genuine job requirement
+                        {% elif item == "skills_charge" %}
+                            Immigration Skills Charge
+                        {% elif item == "going_rate" %}
+                            Occupation going rate
+                        {% else %}
+                            {{ item }}
+                        {% endif %}
+                        {% if not forloop.last %}, {% endif %}
+                    {% endfor %}
             </div>
             {% endif %}
 
@@ -434,7 +418,7 @@
                 Source:
                 <a href="https://www.gov.uk/senior-specialist-worker-visa/eligibility"
                    target="_blank" rel="noopener noreferrer">
-                    GOV.UK — Visa Eligibility
+                    Gov.uk - Visa Eligibility
                 </a>
             </p>
         </section>
@@ -802,6 +786,5 @@
 
         {% endif %}
 
-    </main>
-</body>
-</html>
+</div>
+{% endblock %}

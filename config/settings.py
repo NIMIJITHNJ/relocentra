@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'estimator.apps.EstimatorConfig',
     'immigration.apps.ImmigrationConfig',
+    'core.apps.CoreConfig',
 ]
 
 MIDDLEWARE = [

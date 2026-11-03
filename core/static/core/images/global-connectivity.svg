@@ -1,0 +1,77 @@
+
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1600" height="700" viewBox="0 0 1600 700">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f4f7fb"/>
+      <stop offset="55%" stop-color="#e9f3f9"/>
+      <stop offset="100%" stop-color="#c4e1ee"/>
+    </linearGradient>
+
+    <radialGradient id="globe" cx="35%" cy="30%" r="75%">
+      <stop offset="0%" stop-color="#d9f6fa"/>
+      <stop offset="55%" stop-color="#78b7d0"/>
+      <stop offset="100%" stop-color="#215f86"/>
+    </radialGradient>
+
+    <clipPath id="globe-clip">
+      <circle cx="1260" cy="350" r="290"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1600" height="700" fill="url(#background)"/>
+
+  <!-- Soft atmospheric details -->
+  <circle cx="1260" cy="350" r="330"
+          fill="#86c7d8" opacity=".12"/>
+
+  <circle cx="1260" cy="350" r="305"
+          fill="#ffffff" opacity=".22"/>
+
+  <!-- Globe -->
+  <circle cx="1260" cy="350" r="290"
+          fill="url(#globe)"/>
+
+  <g clip-path="url(#globe-clip)"
+     fill="none" stroke="#ffffff" stroke-width="1.5"
+     opacity=".38">
+    <ellipse cx="1260" cy="350" rx="105" ry="290"/>
+    <ellipse cx="1260" cy="350" rx="205" ry="290"/>
+    <ellipse cx="1260" cy="350" rx="290" ry="105"/>
+    <ellipse cx="1260" cy="350" rx="290" ry="205"/>
+    <path d="M970 350 H1550"/>
+    <path d="M1260 60 V640"/>
+  </g>
+
+  <!-- International connections -->
+  <g fill="none" stroke="#ffffff"
+     stroke-linecap="round">
+    <path d="M985 365 Q1120 95 1445 135"
+          stroke-width="3" opacity=".8"/>
+    <path d="M1045 510 Q1260 130 1515 310"
+          stroke-width="2.5" opacity=".75"/>
+    <path d="M1110 205 Q1320 455 1520 440"
+          stroke-width="2" opacity=".65"/>
+    <path d="M870 560 Q1060 120 1390 225"
+          stroke-width="2" opacity=".55"/>
+    <path d="M710 620 Q1020 240 1510 350"
+          stroke-width="2" opacity=".35"/>
+  </g>
+
+  <!-- Connected locations -->
+  <g fill="#ffffff" stroke="#79cbd8" stroke-width="3">
+    <circle cx="985" cy="365" r="8"/>
+    <circle cx="1445" cy="135" r="8"/>
+    <circle cx="1045" cy="510" r="7"/>
+    <circle cx="1515" cy="310" r="8"/>
+    <circle cx="1110" cy="205" r="7"/>
+    <circle cx="1520" cy="440" r="8"/>
+    <circle cx="1390" cy="225" r="7"/>
+  </g>
+
+  <!-- Gentle foreground waves -->
+  <path d="M0 590 Q400 470 800 610 T1600 550 V700 H0Z"
+        fill="#ffffff" opacity=".23"/>
+  <path d="M0 645 Q500 540 1000 660 T1600 610 V700 H0Z"
+        fill="#ffffff" opacity=".25"/>
+</svg>

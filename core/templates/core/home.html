@@ -1,0 +1,144 @@
+
+{% extends "core/base.html" %}
+
+{% block title %}Relocentra | Global Mobility Planning{% endblock %}
+
+{% block content %}
+
+<section class="hero" aria-labelledby="hero-title">
+    <span class="eyebrow">International Assignment Planning</span>
+
+    <h1 id="hero-title" class="hero-title">
+        Global mobility planning,
+        made simpler.
+    </h1>
+
+    <p class="hero-description">
+        Explore the financial and immigration considerations
+        of transferring an employee from Switzerland to the UK,
+        using one connected planning workspace.
+    </p>
+
+    <div class="hero-actions">
+        <a href="#tools" class="ui-button">
+            Explore Tools
+        </a>
+
+        <a href="{% url 'assignment' %}"
+           class="ui-button ui-button-secondary">
+            Start Cost Estimation
+        </a>
+    </div>
+</section>
+
+<section id="tools" aria-labelledby="tools-title">
+    <div class="page-intro">
+        <span class="eyebrow">Your Workspace</span>
+
+        <h2 id="tools-title" class="section-title">
+            Choose your assessment
+        </h2>
+
+        <p class="page-description">
+            Select an assessment to explore costs, requirements
+            and supporting guidance.
+        </p>
+    </div>
+
+    <div class="feature-grid">
+
+        <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+                £
+            </span>
+
+            <h2>Assignment Cost Estimator</h2>
+
+            <p>
+                Understand the financial implications of an
+                international employee assignment.
+            </p>
+
+            <ul>
+                <li>Salary and bonus conversion</li>
+                <li>UK income tax and tax gross-up</li>
+                <li>Swiss tax and social security assumptions</li>
+                <li>Accommodation and relocation costs</li>
+                <li>Two-year employer cost breakdown</li>
+            </ul>
+
+            <a href="{% url 'assignment' %}"
+               class="ui-button">
+                Open Cost Estimator
+            </a>
+        </article>
+
+        <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+                &#9992;
+            </span>
+
+            <h2>Immigration Assessment</h2>
+
+            <p>
+                Review the immigration and sponsorship
+                requirements for a Switzerland-to-UK transfer.
+            </p>
+
+            <ul>
+                <li>Work visa eligibility assessment</li>
+                <li>Employer sponsorship requirements</li>
+                <li>Visa and related fee estimates</li>
+                <li>Business visitor and ETA checks</li>
+                <li>Documents and processing timelines</li>
+            </ul>
+
+            <a href="{% url 'immigration' %}"
+               class="ui-button">
+                Open Immigration Assessment
+            </a>
+        </article>
+
+    </div>
+</section>
+
+<section class="ui-card" style="margin-top: 32px;"
+         aria-labelledby="workflow-title">
+
+    <span class="eyebrow">How It Works</span>
+
+    <h2 id="workflow-title" class="section-title">
+        From inputs to informed decisions
+    </h2>
+
+    <div class="feature-grid">
+
+        <div>
+            <h3>01. Enter assignment details</h3>
+            <p>
+                Review the pre-filled Switzerland-to-UK scenario
+                and adjust the relevant inputs.
+            </p>
+        </div>
+
+        <div>
+            <h3>02. Explore the assessment</h3>
+            <p>
+                Examine estimated costs, eligibility checks,
+                immigration requirements and processing guidance.
+            </p>
+        </div>
+
+    </div>
+
+    <p style="width: 100%; max-width: none; margin-top: 24px;
+          color: #64748b; font-size: 16px;">
+        <strong>Important:</strong> Results are estimates based
+        on the selected assumptions. Official sources are
+        provided for reference. Relocentra does not replace
+        professional tax or immigration advice.
+    </p>
+
+</section>
+
+{% endblock %}

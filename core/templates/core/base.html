@@ -1,0 +1,72 @@
+
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Relocentra - International assignment cost and immigration planning.">
+
+    <title>{% block title %}Relocentra{% endblock %}</title>
+
+    <link rel="stylesheet" href="{% static 'core/css/site.css' %}">
+
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <header class="site-header">
+        <div class="header-inner">            
+                <a class="brand" href="/" aria-label="Relocentra home">
+                    <img
+                        class="brand-mark"
+                        src="{% static 'core/images/relocentra-logo-icon.png' %}"
+                        alt=""
+                        width="44"
+                        height="44"
+                    >
+                    <span class="brand-details">
+                    <span class="brand-name">Relocentra</span>
+                    <span class="brand-caption">Global mobility workspace</span>
+                </span>
+            </a>
+
+            <nav class="main-nav" aria-label="Main navigation">
+                <a href="/"
+                   class="nav-link {% if request.path == '/' %}active{% endif %}"
+                   {% if request.path == '/' %}aria-current="page"{% endif %}>
+                    Home
+                </a>
+
+                <a href="{% url 'assignment' %}"
+                   class="nav-link {% if request.resolver_match.url_name == 'assignment' %}active{% endif %}"
+                   {% if request.resolver_match.url_name == 'assignment' %}aria-current="page"{% endif %}>
+                    Cost Estimator
+                </a>
+
+                <a href="{% url 'immigration' %}"
+                   class="nav-link {% if request.resolver_match.url_name == 'immigration' %}active{% endif %}"
+                   {% if request.resolver_match.url_name == 'immigration' %}aria-current="page"{% endif %}>
+                    Immigration
+                </a>
+            </nav>
+        </div>
+    </header>
+
+    <main id="main-content" class="site-main">
+        <div class="page-shell">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <footer class="site-footer">
+        <div class="footer-inner">
+            <span>© {% now "Y" %} Relocentra</span>
+            <span>International assignment planning, made clearer.</span>
+        </div>
+    </footer>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
