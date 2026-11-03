@@ -6,6 +6,8 @@ from .services.documents import document_checks
 from .services.visitor import visitor_checks
 from .services.sponsorship import sponsor_checks
 from .services.timeline import immigration_timeline
+from .forms import ImmigrationForm
+from .services.assessment import assess_immigration
 
 class VisaEligibilityTests(SimpleTestCase):
 
@@ -1258,3 +1260,177 @@ class ImmigrationTimelineTests(SimpleTestCase):
         self.assertEqual(fees["licence_priority"], Decimal("750"))
         self.assertEqual(fees["cos_priority"], Decimal("350"))
         self.assertEqual(fees["optional_fees"], Decimal("1100"))
+
+class ImmigrationAssessmentTests(SimpleTestCase):
+
+    # Build form inputs using the configured defaults
+    def inputs(self, **changes):
+        values = {
+            name: field.initial
+            for name, field in ImmigrationForm.base_fields.items()
+            if field.initial is not None
+        }
+        values.update(changes)
+        return values
+
+    # Validate the form before running the assessment
+    def assess(self, **changes):
+        form = ImmigrationForm(data=self.inputs(**changes))
+        self.assertTrue(form.is_valid(), form.errors.as_text())
+        return assess_immigration(form.cleaned_data)
+
+    def test_default_assignment(self):
+        result = self.assess()
+
+        self.assertEqual(result["status"], "verification_required")
+        self.assertTrue(result["eligibility"]["salary_met"])
+        self.assertTrue(result["eligibility"]["employment_met"])
+        self.assertEqual(
+            result["sponsorship"]["status"],
+            "verification_required"
+        )
+        self.assertEqual(result["fees"]["eta"], Decimal("20"))
+        self.assertEqual(
+            result["fees"]["overall_total"],
+            Decimal("6591.50")
+        )
+        self.assertEqual(
+            result["documents"]["maintenance_amount"],
+            Decimal("1270")
+        )
+        self.assertEqual(len(result["timeline"]["visitor_stages"]), 1)
+
+    def test_no_business_visit(self):
+        result = self.assess(plan_visit=False)
+
+        self.assertIsNone(result["visitor"])
+        self.assertEqual(result["fees"]["eta"], Decimal("0"))
+        self.assertEqual(result["timeline"]["visitor_stages"], [])
+        self.assertEqual(
+            result["fees"]["overall_total"],
+            Decimal("6571.50")
+        )
+
+    def test_existing_eta(self):
+        result = self.assess(has_valid_eta=True)
+
+        self.assertTrue(result["visitor"]["eta_required"])
+        self.assertFalse(result["visitor"]["eta_application_needed"])
+        self.assertEqual(result["fees"]["eta"], Decimal("0"))
+        self.assertEqual(result["timeline"]["visitor_stages"], [])
+
+    def test_complete_core_requirements(self):
+        result = self.assess(
+            occupation_code="2131",
+            occupation_eligible="yes",
+            going_rate_gbp=42600,
+            licence_valid="yes",
+            route_authorised="yes",
+            rating="A",
+            link_type="common_control",
+            link_verified="yes",
+            linked_entity_recorded="yes",
+            genuine_job="yes",
+            lawful_job="yes",
+            cos_available="yes",
+            cos_assigned="yes",
+            cos_valid="yes",
+            isc_paid="yes",
+        )
+
+        self.assertEqual(result["status"], "core_requirements_met")
+        self.assertEqual(result["eligibility"]["failed"], [])
+        self.assertEqual(result["eligibility"]["pending"], [])
+        self.assertEqual(result["sponsorship"]["actions"], [])
+        self.assertEqual(result["sponsorship"]["pending"], [])
+
+    def test_sponsor_not_licensed(self):
+        result = self.assess(licence_valid="no")
+
+        self.assertEqual(
+            result["sponsorship"]["status"],
+            "action_required"
+        )
+        self.assertIn("licence", result["sponsorship"]["actions"])
+        self.assertEqual(result["status"], "requirements_not_met")
+
+    def test_sponsor_priority_integration(self):
+        result = self.assess(
+            licence_status="new",
+            licence_priority=True,
+            extra_cos_needed=True,
+            cos_priority=True,
+        )
+
+        fees = result["fees"]
+        stages = result["timeline"]["work_stages"]
+
+        self.assertEqual(fees["licence_priority"], Decimal("750"))
+        self.assertEqual(fees["cos_priority"], Decimal("350"))
+        self.assertEqual(
+            fees["mandatory_employer"],
+            Decimal("4847")
+        )
+        self.assertEqual(
+            fees["overall_total"],
+            Decimal("9373.50")
+        )
+        self.assertEqual(
+            stages[0]["time"],
+            "Within 10 working days"
+        )
+        self.assertEqual(
+            stages[1]["time"],
+            "Within 5 working days"
+        )
+
+    def test_visitor_employment_restriction(self):
+        result = self.assess(purpose="uk_employment")
+
+        self.assertEqual(
+            result["visitor"]["status"],
+            "work_visa_required"
+        )
+        self.assertEqual(result["fees"]["eta"], Decimal("0"))
+        self.assertEqual(result["timeline"]["visitor_stages"], [])
+
+    def test_maintenance_integration(self):
+        result = self.assess(sponsor_maintenance=True)
+
+        self.assertEqual(
+            result["documents"]["maintenance_amount"],
+            Decimal("0")
+        )
+        self.assertEqual(
+            result["fees"]["maintenance_evidence"],
+            Decimal("0")
+        )
+
+    def test_employer_funded_fees(self):
+        result = self.assess(
+            employer_pays_visa=True,
+            employer_pays_ihs=True,
+            employer_pays_eta=True,
+        )
+
+        self.assertEqual(
+            result["fees"]["employer_total"],
+            Decimal("6591.50")
+        )
+        self.assertEqual(
+            result["fees"]["employee_total"],
+            Decimal("0")
+        )
+
+    def test_form_validation(self):
+        cases = [
+            {"permission_months": Decimal("12")},
+            {"licence_priority": True},
+            {"cos_priority": True},
+            {"cos_valid": "yes", "cos_assigned": "no"},
+        ]
+
+        for changes in cases:
+            with self.subTest(changes=changes):
+                form = ImmigrationForm(data=self.inputs(**changes))
+                self.assertFalse(form.is_valid())
