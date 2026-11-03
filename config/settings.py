@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'estimator.apps.EstimatorConfig',
+    'immigration.apps.ImmigrationConfig',
 ]
 
 MIDDLEWARE = [
