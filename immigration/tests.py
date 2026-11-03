@@ -1,7 +1,7 @@
 from decimal import Decimal
 from django.test import SimpleTestCase
-
 from .services.eligibility import visa_checks
+from .services.fees import visa_fees
 
 
 class VisaEligibilityTests(SimpleTestCase):
@@ -238,3 +238,239 @@ class VisaEligibilityTests(SimpleTestCase):
                 with self.assertRaises(ValueError):
                     self.verified(**values)
 
+class ImmigrationFeeTests(SimpleTestCase):
+
+    # Build the standard two-year assignment scenario
+    def quote(self, **changes):
+        inputs = {
+            "assignment_months": 24,
+            "permission_months": Decimal("24.5"),
+        }
+        inputs.update(changes)
+        return visa_fees(**inputs)
+
+    def test_assignment_costs(self):
+        result = self.quote()
+
+        self.assertEqual(result["visa"], Decimal("819"))
+        self.assertEqual(result["ihs"], Decimal("2587.50"))
+        self.assertEqual(result["cos"], Decimal("525"))
+        self.assertEqual(result["isc"], Decimal("2640"))
+        self.assertEqual(result["licence"], Decimal("0"))
+        self.assertEqual(result["mandatory_employer"], Decimal("3165"))
+        self.assertEqual(result["overall_total"], Decimal("6571.50"))
+        self.assertEqual(result["employer_total"], Decimal("3165"))
+        self.assertEqual(result["employee_total"], Decimal("3406.50"))
+        self.assertEqual(result["ihs_blocks"], Decimal("5"))
+
+    def test_small_sponsor(self):
+        result = self.quote(sponsor_size="small")
+
+        self.assertEqual(result["isc"], Decimal("960"))
+        self.assertEqual(result["mandatory_employer"], Decimal("1485"))
+        self.assertEqual(result["overall_total"], Decimal("4891.50"))
+
+    def test_new_licence(self):
+        large = self.quote(licence_status="new")
+        small = self.quote(
+            sponsor_size="small",
+            licence_status="new"
+        )
+
+        self.assertEqual(large["licence"], Decimal("1682"))
+        self.assertEqual(small["licence"], Decimal("611"))
+        self.assertEqual(large["employer_total"], Decimal("4847"))
+        self.assertEqual(small["employer_total"], Decimal("2096"))
+
+    def test_add_worker_licence(self):
+        large = self.quote(licence_status="add_worker")
+        small = self.quote(
+            sponsor_size="small",
+            licence_status="add_worker"
+        )
+
+        self.assertEqual(large["licence"], Decimal("1071"))
+        self.assertEqual(small["licence"], Decimal("0"))
+
+    def test_isc_exemption(self):
+        result = self.quote(isc_exempt=True)
+
+        self.assertEqual(result["isc"], Decimal("0"))
+        self.assertEqual(result["mandatory_employer"], Decimal("525"))
+
+    def test_isc_duration(self):
+        cases = [
+            (6, 1320),
+            (7, 1320),
+            (12, 1320),
+            (13, 1980),
+            (18, 1980),
+            (19, 2640),
+            (24, 2640),
+            (25, 3300),
+            (60, 6600),
+        ]
+
+        for months, expected in cases:
+            with self.subTest(months=months):
+                result = self.quote(
+                    assignment_months=months,
+                    permission_months=months
+                )
+                self.assertEqual(
+                    result["isc"],
+                    Decimal(str(expected))
+                )
+
+    def test_ihs_duration(self):
+        cases = [
+            ("6", "0"),
+            ("6.1", "1035"),
+            ("12", "1035"),
+            ("12.1", "1552.50"),
+            ("18", "1552.50"),
+            ("18.1", "2070"),
+            ("24", "2070"),
+            ("24.1", "2587.50"),
+            ("30", "2587.50"),
+        ]
+
+        for months, expected in cases:
+            with self.subTest(months=months):
+                result = self.quote(
+                    assignment_months=1,
+                    permission_months=Decimal(months)
+                )
+                self.assertEqual(
+                    result["ihs"],
+                    Decimal(expected)
+                )
+
+    def test_short_visa_outside(self):
+        result = self.quote(
+            assignment_months=5,
+            permission_months=5
+        )
+
+        self.assertEqual(result["ihs"], Decimal("0"))
+        self.assertEqual(result["isc"], Decimal("0"))
+        self.assertEqual(result["overall_total"], Decimal("1344"))
+
+    def test_short_visa_inside(self):
+        result = self.quote(
+            assignment_months=5,
+            permission_months=5,
+            location="inside"
+        )
+
+        self.assertEqual(result["visa"], Decimal("943"))
+        self.assertEqual(result["ihs"], Decimal("517.50"))
+        self.assertEqual(result["isc"], Decimal("1320"))
+        self.assertEqual(result["overall_total"], Decimal("3305.50"))
+
+    def test_visa_fee_threshold(self):
+        cases = [
+            ("outside", "36", "819"),
+            ("outside", "36.1", "1618"),
+            ("inside", "36", "943"),
+            ("inside", "36.1", "1865"),
+        ]
+
+        for location, months, expected in cases:
+            with self.subTest(location=location, months=months):
+                result = self.quote(
+                    location=location,
+                    assignment_months=24,
+                    permission_months=Decimal(months)
+                )
+                self.assertEqual(result["visa"], Decimal(expected))
+
+    def test_employer_pays_all(self):
+        result = self.quote(
+            employer_pays_visa=True,
+            employer_pays_ihs=True
+        )
+
+        self.assertEqual(
+            result["employer_total"],
+            Decimal("6571.50")
+        )
+        self.assertEqual(result["employee_total"], Decimal("0"))
+
+    def test_optional_services(self):
+        result = self.quote(
+            priority="priority",
+            eta=True,
+            employer_pays_priority=True,
+            employer_pays_eta=True
+        )
+
+        self.assertEqual(result["priority"], Decimal("500"))
+        self.assertEqual(result["eta"], Decimal("20"))
+        self.assertEqual(result["optional_fees"], Decimal("520"))
+        self.assertEqual(result["overall_total"], Decimal("7091.50"))
+        self.assertEqual(result["employer_total"], Decimal("3685"))
+
+    def test_super_priority(self):
+        result = self.quote(priority="super")
+
+        self.assertEqual(result["priority"], Decimal("1000"))
+        self.assertEqual(result["optional_fees"], Decimal("1000"))
+
+    def test_maintenance(self):
+        normal = self.quote()
+        certified = self.quote(maintenance_certified=True)
+
+        self.assertEqual(
+            normal["maintenance_evidence"],
+            Decimal("1270")
+        )
+        self.assertEqual(
+            certified["maintenance_evidence"],
+            Decimal("0")
+        )
+        self.assertEqual(
+            normal["overall_total"],
+            certified["overall_total"]
+        )
+
+    def test_cost_balance(self):
+        result = self.quote(
+            sponsor_size="small",
+            licence_status="new",
+            eta=True,
+            priority="priority",
+            employer_pays_visa=True,
+            employer_pays_eta=True
+        )
+
+        self.assertEqual(
+            result["employer_total"] + result["employee_total"],
+            result["overall_total"]
+        )
+
+    def test_invalid_inputs(self):
+        invalid = [
+            {"assignment_months": 0},
+            {"assignment_months": -1},
+            {"assignment_months": 61},
+            {"assignment_months": 2.5},
+            {"assignment_months": "NaN"},
+            {"permission_months": 0},
+            {"permission_months": "Infinity"},
+            {"permission_months": -1},
+            {"permission_months": 12},
+            {"sponsor_size": "medium"},
+            {"location": "unknown"},
+            {"licence_status": "invalid"},
+            {"priority": "fast"},
+            {"isc_exempt": "yes"},
+            {"eta": 1},
+            {"employer_pays_visa": "true"},
+            {"maintenance_certified": None},
+        ]
+
+        for values in invalid:
+            with self.subTest(values=values):
+                with self.assertRaises(ValueError):
+                    self.quote(**values)
