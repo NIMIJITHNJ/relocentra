@@ -9,6 +9,8 @@ COS_FEE = Decimal("525")
 ETA_FEE = Decimal("20")
 PRIORITY_FEE = Decimal("500")
 SUPER_FEE = Decimal("1000")
+LICENCE_PRIORITY_FEE = Decimal("750")
+COS_PRIORITY_FEE = Decimal("350")
 MAINTENANCE = Decimal("1270")
 
 ISC_RATES = {
@@ -55,10 +57,13 @@ def visa_fees(
     employer_pays_priority=False,
     employer_pays_eta=False,
     maintenance_certified=False,
+    licence_priority=False,
+    cos_priority=False,
+    extra_cos_needed=False,
 ):
     months = check_num(assignment_months, "assignment duration")
     permission = check_num(permission_months, "visa duration")
-    
+
     if months != months.to_integral_value() or months > 60:
         raise ValueError("Assignment duration must be 1 to 60 whole months.")
     
@@ -77,10 +82,17 @@ def visa_fees(
     if priority not in ("none", "priority", "super"):
         raise ValueError("Invalid priority option.")
 
+    if licence_priority and licence_status != "new":
+        raise ValueError("Licence priority requires a new licence.")
+
+    if cos_priority and not extra_cos_needed:
+        raise ValueError("CoS priority requires an additional allocation.")
+
     flags = (
         isc_exempt, eta, employer_pays_visa,
         employer_pays_ihs, employer_pays_priority,
-        employer_pays_eta, maintenance_certified
+        employer_pays_eta, maintenance_certified,
+        licence_priority, cos_priority, extra_cos_needed
     )
 
     if any(type(value) is not bool for value in flags):
@@ -134,10 +146,12 @@ def visa_fees(
     }[priority]
 
     eta_cost = ETA_FEE if eta else Decimal("0")
-
+    licence_fast = LICENCE_PRIORITY_FEE if licence_priority else Decimal("0")
+    cos_fast = COS_PRIORITY_FEE if cos_priority else Decimal("0")
     mandatory = COS_FEE + isc + licence
+    sponsor_optional = licence_fast + cos_fast
     applicant = visa + ihs
-    optional = priority_cost + eta_cost
+    optional = priority_cost + eta_cost + sponsor_optional
 
     overall = mandatory + applicant + optional
 
@@ -156,7 +170,7 @@ def visa_fees(
     if employer_pays_eta:
         employer_extra += eta_cost
 
-    employer_total = mandatory + employer_extra
+    employer_total = mandatory + sponsor_optional + employer_extra
     employee_total = overall - employer_total
 
     proof_funds = (
@@ -172,6 +186,8 @@ def visa_fees(
         "licence": licence,
         "priority": priority_cost,
         "eta": eta_cost,
+        "licence_priority": licence_fast,
+        "cos_priority": cos_fast,
         "mandatory_employer": mandatory,
         "applicant_fees": applicant,
         "optional_fees": optional,

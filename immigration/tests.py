@@ -476,6 +476,59 @@ class ImmigrationFeeTests(SimpleTestCase):
             with self.subTest(values=values):
                 with self.assertRaises(ValueError):
                     self.quote(**values)
+    
+    def test_licence_priority(self):
+        result = self.quote(
+            licence_status="new",
+            licence_priority=True
+        )
+
+        self.assertEqual(result["licence_priority"], Decimal("750"))
+        self.assertEqual(result["mandatory_employer"], Decimal("4847"))
+        self.assertEqual(result["optional_fees"], Decimal("750"))
+        self.assertEqual(result["employer_total"], Decimal("5597"))
+        self.assertEqual(result["overall_total"], Decimal("9003.50"))
+
+    def test_cos_priority(self):
+        result = self.quote(
+            extra_cos_needed=True,
+            cos_priority=True
+        )
+
+        self.assertEqual(result["cos_priority"], Decimal("350"))
+        self.assertEqual(result["mandatory_employer"], Decimal("3165"))
+        self.assertEqual(result["optional_fees"], Decimal("350"))
+        self.assertEqual(result["employer_total"], Decimal("3515"))
+        self.assertEqual(result["overall_total"], Decimal("6921.50"))
+
+    def test_both_sponsor_priorities(self):
+        result = self.quote(
+            licence_status="new",
+            licence_priority=True,
+            extra_cos_needed=True,
+            cos_priority=True
+        )
+
+        self.assertEqual(result["optional_fees"], Decimal("1100"))
+        self.assertEqual(result["employer_total"], Decimal("5947"))
+        self.assertEqual(
+            result["employer_total"] + result["employee_total"],
+            result["overall_total"]
+        )
+
+    def test_invalid_sponsor_priority(self):
+        invalid = [
+            {"licence_priority": True},
+            {"cos_priority": True},
+            {"licence_priority": "yes"},
+            {"cos_priority": 1},
+            {"extra_cos_needed": None},
+        ]
+
+        for values in invalid:
+            with self.subTest(values=values):
+                with self.assertRaises(ValueError):
+                    self.quote(**values)
 
 class DocumentRequirementTests(SimpleTestCase):
 
