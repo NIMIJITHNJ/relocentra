@@ -217,6 +217,6 @@ ChatGPT was used to research and understand UK and Swiss tax, social security an
 
 ## Demonstration Video
 
-A 5–10 minute Loom demonstration covering installation, application functionality, calculation logic and code structure will be linked here before submission.
+A 5–10 minute Loom demonstration covering installation, application functionality, calculation logic and code structure is linked below.
 
-**Loom link:** To be added.
+**Loom link: https://drive.google.com/file/d/1yD7F04PLzv-Uu_mgAjXe-T-MB4WK3O70/view?usp=drive_link**.
